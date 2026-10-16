@@ -232,20 +232,22 @@ fun PlaylistScreen(
     val shouldStartPaginate =
         remember {
             derivedStateOf {
-                tracksListState != ListState.PAGINATION_EXHAUST &&
+                !continuation.isNullOrEmpty() &&
+                    tracksListState != ListState.PAGINATION_EXHAUST &&
+                    tracks.isNotEmpty() &&
                     (
                         lazyState.layoutInfo.visibleItemsInfo
                             .lastOrNull()
                             ?.index ?: -9
-                    ) >= (lazyState.layoutInfo.totalItemsCount - 25)
+                    ) >= (lazyState.layoutInfo.totalItemsCount - 6)
             }
         }
 
-    LaunchedEffect(key1 = shouldStartPaginate.value) {
+    LaunchedEffect(key1 = shouldStartPaginate.value, key2 = tracksListState) {
         Logger.d(tag, "shouldStartPaginate: ${shouldStartPaginate.value}")
         Logger.d(tag, "tracksListState: $tracksListState")
         Logger.d(tag, "Continuation: $continuation")
-        if (shouldStartPaginate.value && tracksListState == ListState.IDLE) {
+        if (shouldStartPaginate.value && tracksListState == ListState.IDLE && !continuation.isNullOrEmpty()) {
             viewModel.getContinuationTrack(
                 id,
                 continuation,

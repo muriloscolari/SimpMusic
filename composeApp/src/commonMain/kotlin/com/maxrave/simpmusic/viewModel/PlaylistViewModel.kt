@@ -215,7 +215,8 @@ class PlaylistViewModel(
                                     )
                                 _tracks.value = data.first.tracks
                                 _continuation.value = data.second
-                                if (data.second.isNullOrEmpty()) _tracksListState.value = ListState.PAGINATION_EXHAUST
+                                _tracksListState.value =
+                                    if (data.second.isNullOrEmpty()) ListState.PAGINATION_EXHAUST else ListState.IDLE
                                 playlistRepository.insertRadioPlaylist(data.first.toPlaylistEntity())
                             }
 
@@ -255,7 +256,8 @@ class PlaylistViewModel(
                                     )
                                 _tracks.value = data.first.tracks
                                 _continuation.value = data.second
-                                if (data.second.isNullOrEmpty()) _tracksListState.value = ListState.PAGINATION_EXHAUST
+                                _tracksListState.value =
+                                    if (data.second.isNullOrEmpty()) ListState.PAGINATION_EXHAUST else ListState.IDLE
                                 getPlaylistEntity(id = data.first.id, playlistBrowse = data.first)
                             }
 
@@ -274,7 +276,9 @@ class PlaylistViewModel(
     ) {
         viewModelScope.launch {
             if (continuation.isNullOrEmpty()) {
-                _tracksListState.value = ListState.PAGINATION_EXHAUST
+                if (_tracks.value.isNotEmpty()) {
+                    _tracksListState.value = ListState.PAGINATION_EXHAUST
+                }
                 return@launch
             } else {
                 _tracksListState.value = ListState.PAGINATING
