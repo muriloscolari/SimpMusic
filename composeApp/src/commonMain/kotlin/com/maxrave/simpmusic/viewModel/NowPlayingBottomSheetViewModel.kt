@@ -373,6 +373,12 @@ class NowPlayingBottomSheetViewModel(
                 }
 
                 is NowPlayingBottomSheetUIEvent.StartRadio -> {
+                    val currentVideoId =
+                        mediaPlayerHandler.nowPlayingState.value.songEntity?.videoId
+                            ?: (mediaPlayerHandler.getCurrentMediaItem() ?: mediaPlayerHandler.nowPlaying.value)
+                                ?.mediaId?.removePrefix("Video")
+                    val isCurrentSong = !currentVideoId.isNullOrEmpty() && currentVideoId == ev.videoId
+
                     songRepository
                         .getRadioFromEndpoint(
                             YouTubeWatchEndpoint(
@@ -383,21 +389,44 @@ class NowPlayingBottomSheetViewModel(
                             val data = res.data
                             when (res) {
                                 is Resource.Success if (data != null && data.first.isNotEmpty()) -> {
-                                    setQueueData(
-                                        QueueData.Data(
-                                            listTracks = data.first,
-                                            firstPlayedTrack = data.first.first(),
+                                    val isStillPlayingCurrent =
+                                        isCurrentSong &&
+                                            (
+                                                mediaPlayerHandler.nowPlayingState.value.songEntity?.videoId
+                                                    ?: (mediaPlayerHandler.getCurrentMediaItem() ?: mediaPlayerHandler.nowPlaying.value)
+                                                        ?.mediaId?.removePrefix("Video")
+                                            ) == ev.videoId
+
+                                    if (isStillPlayingCurrent) {
+                                        val radioTracks =
+                                            if (data.first.firstOrNull()?.videoId == ev.videoId) {
+                                                data.first.drop(1)
+                                            } else {
+                                                data.first
+                                            }
+                                        mediaPlayerHandler.setRadioQueueForCurrentSong(
+                                            radioTracks = radioTracks,
                                             playlistId = "RDAMVM${ev.videoId}",
                                             playlistName = ev.name,
-                                            playlistType = PlaylistType.RADIO,
                                             continuation = data.second,
-                                        ),
-                                    )
-                                    loadMediaItem(
-                                        data.first.first(),
-                                        Config.PLAYLIST_CLICK,
-                                        0,
-                                    )
+                                        )
+                                    } else {
+                                        setQueueData(
+                                            QueueData.Data(
+                                                listTracks = data.first,
+                                                firstPlayedTrack = data.first.first(),
+                                                playlistId = "RDAMVM${ev.videoId}",
+                                                playlistName = ev.name,
+                                                playlistType = PlaylistType.RADIO,
+                                                continuation = data.second,
+                                            ),
+                                        )
+                                        loadMediaItem(
+                                            data.first.first(),
+                                            Config.PLAYLIST_CLICK,
+                                            0,
+                                        )
+                                    }
                                 }
 
                                 else -> {
