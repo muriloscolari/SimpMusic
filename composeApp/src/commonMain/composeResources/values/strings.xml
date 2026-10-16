@@ -1012,4 +1012,8 @@
     <string name="log_stack_trace_lines">Stack trace · %1$s lines</string>
     <string name="log_hide_stack_trace">Hide stack trace</string>
     <string name="log_export_failed">Could not export the log</string>
+    <string name="max_parallel_downloads">Simultaneous downloads</string>
+    <string name="max_parallel_downloads_custom">Custom (1–20)</string>
+    <string name="max_parallel_downloads_warning">Setting more than 5 simultaneous downloads may cause the app to become very slow or freeze while downloading.</string>
+    <string name="max_parallel_downloads_invalid">Enter a value between 1 and 20</string>
 </resources>

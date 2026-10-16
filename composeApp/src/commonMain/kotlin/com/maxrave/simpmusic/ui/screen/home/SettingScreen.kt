@@ -348,6 +348,10 @@ import simpmusic.composeapp.generated.resources.romanization_serbian
 import simpmusic.composeapp.generated.resources.romanization_ukrainian
 import simpmusic.composeapp.generated.resources.lyrics_style_apple_music
 import simpmusic.composeapp.generated.resources.lyrics_style_classic
+import simpmusic.composeapp.generated.resources.max_parallel_downloads
+import simpmusic.composeapp.generated.resources.max_parallel_downloads_custom
+import simpmusic.composeapp.generated.resources.max_parallel_downloads_invalid
+import simpmusic.composeapp.generated.resources.max_parallel_downloads_warning
 import simpmusic.composeapp.generated.resources.main_lyrics_provider
 import simpmusic.composeapp.generated.resources.manage_your_youtube_accounts
 import simpmusic.composeapp.generated.resources.maxrave_dev
@@ -523,6 +527,7 @@ fun SettingScreen(
     val smartDownloadsEnabled by viewModel.smartDownloadsEnabled.collectAsStateWithLifecycle()
     val smartDownloadsCount by viewModel.smartDownloadsCount.collectAsStateWithLifecycle()
     val videoDownloadQuality by viewModel.videoDownloadQuality.collectAsStateWithLifecycle()
+    val maxParallelDownloads by viewModel.maxParallelDownloads.collectAsStateWithLifecycle()
     val keepYoutubePlaylistOffline by viewModel.keepYouTubePlaylistOffline.collectAsStateWithLifecycle()
     val localTrackingEnabled by viewModel.localTrackingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val blogNotificationEnabled by viewModel.blogNotificationEnabled.collectAsStateWithLifecycle()
@@ -1143,6 +1148,53 @@ fun SettingScreen(
                                 confirm =
                                     runBlocking { getString(Res.string.change) } to { state ->
                                         viewModel.setVideoDownloadQuality(state.selectOne?.getSelected() ?: "")
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.max_parallel_downloads),
+                    subtitle = maxParallelDownloads.toString(),
+                    smallSubtitle = true,
+                    onClick = {
+                        val customLabel = runBlocking { getString(Res.string.max_parallel_downloads_custom) }
+                        val invalidMessage = runBlocking { getString(Res.string.max_parallel_downloads_invalid) }
+                        val presetOptions = listOf(1, 2, 3, 4, 5)
+                        val isCustomSelected = maxParallelDownloads !in presetOptions
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.max_parallel_downloads) },
+                                message = runBlocking { getString(Res.string.max_parallel_downloads_warning) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            presetOptions.map { count ->
+                                                (count == maxParallelDownloads) to count.toString()
+                                            } + (isCustomSelected to customLabel),
+                                    ),
+                                textField =
+                                    SettingAlertState.TextFieldData(
+                                        label = customLabel,
+                                        value = if (isCustomSelected) maxParallelDownloads.toString() else "",
+                                        verifyCodeBlock = { input ->
+                                            val parsed = input.trim().toIntOrNull()
+                                            (parsed != null && parsed in 1..20) to invalidMessage
+                                        },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        val selected = state.selectOne?.getSelected()
+                                        val count =
+                                            if (selected == customLabel) {
+                                                state.textField?.value?.trim()?.toIntOrNull()
+                                            } else {
+                                                selected?.toIntOrNull()
+                                            }
+                                        if (count != null) {
+                                            viewModel.setMaxParallelDownloads(count)
+                                        }
                                     },
                                 dismiss = runBlocking { getString(Res.string.cancel) },
                             ),
@@ -3142,7 +3194,7 @@ fun SettingScreen(
                 )
             },
             text = {
-                if (alertState.message != null) {
+                if (alertState.message != null && alertState.selectOne == null) {
                     Column {
                         Text(text = alertState.message)
                         if (alertState.textField != null) {
@@ -3188,58 +3240,108 @@ fun SettingScreen(
                         }
                     }
                 } else if (alertState.selectOne != null) {
-                    LazyColumn(
-                        Modifier
-                            .padding(vertical = 6.dp)
-                            .heightIn(0.dp, 500.dp),
-                    ) {
-                        items(alertState.selectOne.listSelect) { item ->
-                            val onSelect = {
-                                viewModel.setAlertData(
-                                    alertState.copy(
-                                        selectOne =
-                                            alertState.selectOne.copy(
-                                                listSelect =
-                                                    alertState.selectOne.listSelect.toMutableList().map {
-                                                        if (it == item) {
-                                                            true to it.second
-                                                        } else {
-                                                            false to it.second
-                                                        }
-                                                    },
-                                            ),
-                                    ),
-                                )
+                    Column {
+                        if (!alertState.message.isNullOrEmpty()) {
+                            Text(
+                                text = alertState.message,
+                                style = typo().bodySmall,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+                        LazyColumn(
+                            Modifier
+                                .padding(vertical = 6.dp)
+                                .heightIn(0.dp, 500.dp),
+                        ) {
+                            items(alertState.selectOne.listSelect) { item ->
+                                val onSelect = {
+                                    viewModel.setAlertData(
+                                        alertState.copy(
+                                            selectOne =
+                                                alertState.selectOne.copy(
+                                                    listSelect =
+                                                        alertState.selectOne.listSelect.toMutableList().map {
+                                                            if (it == item) {
+                                                                true to it.second
+                                                            } else {
+                                                                false to it.second
+                                                            }
+                                                        },
+                                                ),
+                                        ),
+                                    )
+                                }
+                                Row(
+                                    Modifier
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            onSelect.invoke()
+                                        }.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = item.first,
+                                        onClick = {
+                                            onSelect.invoke()
+                                        },
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = item.second,
+                                        style = typo().bodyMedium,
+                                        maxLines = 1,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .wrapContentHeight(align = Alignment.CenterVertically)
+                                                .basicMarquee(
+                                                    iterations = Int.MAX_VALUE,
+                                                    animationMode = MarqueeAnimationMode.Immediately,
+                                                ).focusable(),
+                                    )
+                                }
                             }
-                            Row(
-                                Modifier
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        onSelect.invoke()
-                                    }.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = item.first,
-                                    onClick = {
-                                        onSelect.invoke()
-                                    },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = item.second,
-                                    style = typo().bodyMedium,
-                                    maxLines = 1,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .wrapContentHeight(align = Alignment.CenterVertically)
-                                            .basicMarquee(
-                                                iterations = Int.MAX_VALUE,
-                                                animationMode = MarqueeAnimationMode.Immediately,
-                                            ).focusable(),
-                                )
-                            }
+                        }
+                        if (alertState.textField != null && alertState.selectOne.listSelect.lastOrNull()?.first == true) {
+                            val verify =
+                                alertState.textField.verifyCodeBlock?.invoke(
+                                    alertState.textField.value,
+                                ) ?: (true to null)
+                            TextField(
+                                value = alertState.textField.value,
+                                onValueChange = {
+                                    viewModel.setAlertData(
+                                        alertState.copy(
+                                            textField =
+                                                alertState.textField.copy(
+                                                    value = it,
+                                                ),
+                                        ),
+                                    )
+                                },
+                                isError = !verify.first,
+                                label = { Text(text = alertState.textField.label) },
+                                supportingText = {
+                                    if (!verify.first) {
+                                        Text(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            text = verify.second ?: "",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                                trailingIcon = {
+                                    if (!verify.first) {
+                                        SimpIcons.Error
+                                    }
+                                },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            vertical = 6.dp,
+                                        ),
+                            )
                         }
                     }
                 } else if (alertState.multipleSelect != null) {
@@ -3292,7 +3394,10 @@ fun SettingScreen(
                         viewModel.setAlertData(null)
                     },
                     enabled =
-                        if (alertState.textField?.verifyCodeBlock != null) {
+                        if (
+                            alertState.textField?.verifyCodeBlock != null &&
+                            (alertState.selectOne == null || alertState.selectOne.listSelect.lastOrNull()?.first == true)
+                        ) {
                             alertState.textField.verifyCodeBlock
                                 .invoke(
                                     alertState.textField.value,
