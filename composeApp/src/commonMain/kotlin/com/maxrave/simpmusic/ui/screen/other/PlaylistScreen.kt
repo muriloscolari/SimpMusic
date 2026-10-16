@@ -137,6 +137,7 @@ import com.maxrave.simpmusic.viewModel.PlaylistViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
+import com.maxrave.simpmusic.ui.theme.LocalLiquidGlassEnabled
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
@@ -236,7 +237,7 @@ fun PlaylistScreen(
                         lazyState.layoutInfo.visibleItemsInfo
                             .lastOrNull()
                             ?.index ?: -9
-                    ) >= (lazyState.layoutInfo.totalItemsCount - 6)
+                    ) >= (lazyState.layoutInfo.totalItemsCount - 25)
             }
         }
 
@@ -259,11 +260,16 @@ fun PlaylistScreen(
         }
     }
 
-    val playingTrack by sharedViewModel.nowPlayingState
-        .mapLatest {
-            it?.songEntity
-        }.collectAsState(initial = null)
-    val isPlaying by sharedViewModel.controllerState.map { it.isPlaying }.collectAsState(initial = false)
+    val playingVideoId by remember(sharedViewModel) {
+        sharedViewModel.nowPlayingState
+            .map { it?.songEntity?.videoId }
+            .distinctUntilChanged()
+    }.collectAsState(initial = null)
+    val isPlaying by remember(sharedViewModel) {
+        sharedViewModel.controllerState
+            .map { it.isPlaying }
+            .distinctUntilChanged()
+    }.collectAsState(initial = false)
 
     var currentItem by remember {
         mutableStateOf<Track?>(null)
@@ -361,14 +367,12 @@ fun PlaylistScreen(
                 val data = state.data
                 Logger.d(tag, "data: $data")
                 if (data == null) return@Crossfade
-                val hazeState =
-                    rememberHazeState()
                 LazyColumn(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .background(mutedPaletteBg)
-                            .hazeSource(hazeState),
+                            .then(if (LocalLiquidGlassEnabled.current) Modifier.hazeSource(hazeState) else Modifier),
                     state = lazyState,
                 ) {
                     if (!showSearchBar) {
@@ -1050,56 +1054,37 @@ fun PlaylistScreen(
                             )
                         }
                     }
-                    items(count = filteredTrack.size, key = { index ->
-                        val item = filteredTrack.getOrNull(index)
-                        (item?.videoId ?: "") + "item_$index"
-                    }) { index ->
+                    items(
+                        count = filteredTrack.size,
+                        key = { index ->
+                            val item = filteredTrack.getOrNull(index)
+                            (item?.videoId ?: "") + "item_$index"
+                        },
+                        contentType = { "playlist_song_item" },
+                    ) { index ->
                         val item = filteredTrack.getOrNull(index)
                         if (item != null) {
-                            Column(modifier = Modifier.animateItem()) {
-                                if (playingTrack?.videoId == item.videoId && isPlaying) {
-                                    SongFullWidthItems(
-                                        forceDark = true,
-                                        isPlaying = true,
-                                        track = item,
-                                        onMoreClickListener = { onItemMoreClick(it) },
-                                        onClickListener = {
-                                            Logger.w("PlaylistScreen", "index: $index")
-                                            onPlaylistItemClick(it)
-                                        },
-                                        onAddToQueue = {
-                                            sharedViewModel.addListToQueue(
-                                                arrayListOf(item),
-                                            )
-                                        },
-                                        selectionMode = selectionState.isActive,
-                                        isSelected = selectionState.isSelected(item.videoId),
-                                        onLongClick = { selectionState.start(it) },
-                                        onSelectToggle = { selectionState.toggle(it) },
-                                        modifier = Modifier,
-                                    )
-                                } else {
-                                    SongFullWidthItems(
-                                        forceDark = true,
-                                        isPlaying = false,
-                                        track = item,
-                                        onMoreClickListener = { onItemMoreClick(it) },
-                                        onClickListener = {
-                                            Logger.w("PlaylistScreen", "index: $index")
-                                            onPlaylistItemClick(it)
-                                        },
-                                        onAddToQueue = {
-                                            sharedViewModel.addListToQueue(
-                                                arrayListOf(item),
-                                            )
-                                        },
-                                        selectionMode = selectionState.isActive,
-                                        isSelected = selectionState.isSelected(item.videoId),
-                                        onLongClick = { selectionState.start(it) },
-                                        onSelectToggle = { selectionState.toggle(it) },
-                                        modifier = Modifier,
-                                    )
-                                }
+                            Column {
+                                SongFullWidthItems(
+                                    forceDark = true,
+                                    isPlaying = playingVideoId == item.videoId && isPlaying,
+                                    track = item,
+                                    onMoreClickListener = { onItemMoreClick(it) },
+                                    onClickListener = {
+                                        Logger.w("PlaylistScreen", "index: $index")
+                                        onPlaylistItemClick(it)
+                                    },
+                                    onAddToQueue = {
+                                        sharedViewModel.addListToQueue(
+                                            arrayListOf(item),
+                                        )
+                                    },
+                                    selectionMode = selectionState.isActive,
+                                    isSelected = selectionState.isSelected(item.videoId),
+                                    onLongClick = { selectionState.start(it) },
+                                    onSelectToggle = { selectionState.toggle(it) },
+                                    modifier = Modifier,
+                                )
                                 if (index < filteredTrack.size - 1) {
                                     HorizontalDivider(
                                         modifier = Modifier.padding(start = 72.dp, end = 16.dp),

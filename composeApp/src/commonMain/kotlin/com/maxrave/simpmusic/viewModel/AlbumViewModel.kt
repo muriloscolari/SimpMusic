@@ -84,17 +84,13 @@ class AlbumViewModel(
                             } else {
                                 albumRepository.insertAlbum(data.toAlbumEntity(browseId)).singleOrNull().let {
                                     log("Insert Album $it")
-                                    data.tracks.forEach { track ->
-                                        songRepository
-                                            .insertSong(
-                                                track.toSongEntity().copy(
-                                                    inLibrary = Config.REMOVED_SONG_DATE_TIME,
-                                                ),
-                                            ).singleOrNull()
-                                            ?.let {
-                                                log("Insert Song $it")
-                                            }
-                                    }
+                                    songRepository.insertSongs(
+                                        data.tracks.map { track ->
+                                            track.toSongEntity().copy(
+                                                inLibrary = Config.REMOVED_SONG_DATE_TIME,
+                                            )
+                                        },
+                                    )
                                 }
                             }
                             getAlbumFlow(browseId)
@@ -246,11 +242,7 @@ class AlbumViewModel(
     fun downloadFullAlbum() {
         viewModelScope.launch {
             // Insert all song to database
-            uiState.value.listTrack.forEach { track ->
-                songRepository.insertSong(track.toSongEntity()).singleOrNull()?.let {
-                    log("Insert Song $it")
-                }
-            }
+            songRepository.insertSongs(uiState.value.listTrack.map { it.toSongEntity() })
             val fullListSong =
                 songRepository
                     .getSongsByListVideoId(uiState.value.listTrack.map { it.videoId })

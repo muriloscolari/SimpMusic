@@ -107,9 +107,11 @@ class DragDropState internal constructor(
                 draggingItemInitialOffset + draggedDistance - item.offset
             } ?: 0f
     private val draggingItemLayoutInfo: LazyListItemInfo?
-        get() =
-            state.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.index == currentIndexOfDraggedItem }
+        get() {
+            val currentIndex = currentIndexOfDraggedItem ?: return null
+            return state.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == currentIndex }
+        }
 
     internal var previousIndexOfDraggedItem by mutableStateOf<Int?>(null)
         private set

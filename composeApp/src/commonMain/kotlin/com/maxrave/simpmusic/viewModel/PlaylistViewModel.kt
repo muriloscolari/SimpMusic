@@ -284,22 +284,10 @@ class PlaylistViewModel(
                         continuation,
                         fromPlaylist = true,
                     ).collectLatest { res ->
-                        res.first?.forEach { track ->
-                            songRepository
-                                .insertSong(
-                                    track
-                                        .toSongEntity()
-                                        .copy(
-                                            inLibrary = Config.REMOVED_SONG_DATE_TIME,
-                                        ),
-                                ).singleOrNull()
-                                ?.let {
-                                    log("Insert song: $it")
-                                }
-                        }
+                        val newTracks = res.first ?: emptyList()
                         _tracks.update {
                             val newList = it.toMutableList()
-                            newList.addAll(res.first ?: emptyList())
+                            newList.addAll(newTracks)
                             newList
                         }
                         if (res.second.isNullOrEmpty()) {
@@ -308,6 +296,15 @@ class PlaylistViewModel(
                         } else {
                             _continuation.value = res.second
                             _tracksListState.value = ListState.IDLE
+                        }
+                        if (newTracks.isNotEmpty()) {
+                            songRepository.insertSongs(
+                                newTracks.map { track ->
+                                    track.toSongEntity().copy(
+                                        inLibrary = Config.REMOVED_SONG_DATE_TIME,
+                                    )
+                                },
+                            )
                         }
                     }
             }
@@ -323,6 +320,13 @@ class PlaylistViewModel(
             viewModelScope.launch {
                 val playlistEntity = playlistRepository.getPlaylist(id).firstOrNull()
                 if (playlistBrowse != null) {
+                    songRepository.insertSongs(
+                        playlistBrowse.tracks.map { tracks ->
+                            tracks.toSongEntity().copy(
+                                inLibrary = Config.REMOVED_SONG_DATE_TIME,
+                            )
+                        },
+                    )
                     if (playlistEntity == null) {
                         playlistRepository.insertAndReplacePlaylist(
                             playlistBrowse.toPlaylistEntity(),
@@ -341,17 +345,6 @@ class PlaylistViewModel(
                             playlistId = id,
                             inLibrary = now(),
                         )
-                    }
-                    playlistBrowse.tracks.forEach { tracks ->
-                        songRepository
-                            .insertSong(
-                                tracks.toSongEntity().copy(
-                                    inLibrary = Config.REMOVED_SONG_DATE_TIME,
-                                ),
-                            ).firstOrNull()
-                            ?.let {
-                                log("Insert song: $it")
-                            }
                     }
                 } else if (playlistEntity != null) {
                     _playlistEntity.value = playlistEntity

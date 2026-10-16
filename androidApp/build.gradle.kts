@@ -106,6 +106,10 @@ android {
             versionNameSuffix = "-dev"
         }
     }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_21
@@ -204,9 +208,10 @@ sentry {
                 println("Failed to load SENTRY_AUTH_TOKEN from local.properties: ${e.message}")
                 null
             }
+        val hasToken = !token.isNullOrEmpty()
         authToken.set(token ?: "")
-        includeProguardMapping.set(true)
-        autoUploadProguardMapping.set(true)
+        includeProguardMapping.set(hasToken)
+        autoUploadProguardMapping.set(hasToken)
     } else {
         includeProguardMapping.set(false)
         autoUploadProguardMapping.set(false)

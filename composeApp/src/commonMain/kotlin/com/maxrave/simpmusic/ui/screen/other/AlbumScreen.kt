@@ -112,6 +112,7 @@ import com.maxrave.simpmusic.viewModel.LocalPlaylistState
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
+import com.maxrave.simpmusic.ui.theme.LocalLiquidGlassEnabled
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
@@ -227,7 +228,7 @@ fun AlbumScreen(
                         Modifier
                             .fillMaxWidth()
                             .background(mutedPaletteBg)
-                            .hazeSource(hazeState),
+                            .then(if (LocalLiquidGlassEnabled.current) Modifier.hazeSource(hazeState) else Modifier),
                     state = lazyState,
                 ) {
                     item(contentType = "header") {
@@ -850,13 +851,17 @@ fun AlbumScreen(
                             }
                         }
                     }
-                    items(count = uiState.trackCount, key = { index ->
-                        val item = uiState.listTrack.getOrNull(index)
-                        item?.videoId + "item_$index"
-                    }) { index ->
+                    items(
+                        count = uiState.trackCount,
+                        key = { index ->
+                            val item = uiState.listTrack.getOrNull(index)
+                            item?.videoId + "item_$index"
+                        },
+                        contentType = { "album_song_item" },
+                    ) { index ->
                         val item = uiState.listTrack.getOrNull(index)
                         if (item != null) {
-                            Column(modifier = Modifier.animateItem()) {
+                            Column {
                                 SongFullWidthItems(
                                     forceDark = true,
                                     isPlaying = item.videoId == playingVideoId,

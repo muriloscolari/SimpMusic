@@ -59,6 +59,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -336,7 +337,13 @@ fun HomeScreen(
     }
     val animatedColor by animateColorAsState(topHeaderColor, tween(500))
     val mainHomeThumbnail by viewModel.mainHomeThumbnail.collectAsStateWithLifecycle()
-    val networkLoader = rememberNetworkLoader(HttpClient(CIO))
+    val httpClient = remember { HttpClient(CIO) }
+    DisposableEffect(httpClient) {
+        onDispose {
+            httpClient.close()
+        }
+    }
+    val networkLoader = rememberNetworkLoader(httpClient)
     val dominantColorState =
         rememberDominantColorState(
             defaultColor = backgroundColor,

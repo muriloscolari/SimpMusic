@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -54,7 +55,7 @@ fun typo(
     val textDirection = if (rtl) TextDirection.Content else TextDirection.Unspecified
     val textAlign = if (rtl) TextAlign.Right else TextAlign.Unspecified
 
-    val typo =
+    return remember(fontFamily, titleColor, bodyColor, textDirection, textAlign) {
         Typography(
             /***
              * This typo().is use for the title of the Playlist, Artist, Song, Album, etc. in Home, Mood, Genre, Playlist, etc.
@@ -160,5 +161,5 @@ fun typo(
                 ),
             // ...
         )
-    return typo
+    }
 }

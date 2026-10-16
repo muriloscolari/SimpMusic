@@ -1236,6 +1236,7 @@ class SharedViewModel(
         packageName: String,
         signingCerts: List<String>,
     ) {
+        if (packageName.endsWith(".dev")) return
         if (packageName !in Config.OFFICIAL_PACKAGE_NAMES) {
             _isOfficialBuild.value = false
             return

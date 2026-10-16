@@ -323,7 +323,9 @@ fun InfoPlayerBottomSheet(
         )
 
     val screenDataState by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
-    val songEntity by sharedViewModel.nowPlayingState.map { it?.songEntity }.collectAsState(null)
+    val songEntity by remember(sharedViewModel) {
+        sharedViewModel.nowPlayingState.map { it?.songEntity }
+    }.collectAsState(null)
     val format by sharedViewModel.format.collectAsState(null)
     val extractSource by sharedViewModel.extractSource.collectAsState()
     val downloadProgress by sharedViewModel.downloadFileProgress.collectAsStateWithLifecycle()
@@ -979,7 +981,9 @@ fun QueueBottomSheet(
     // The row whose ⋯ was tapped, as its queue position and the track that was there.
     var moreFor by remember { mutableStateOf<Pair<Int, Track>?>(null) }
     val screenDataState by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
-    val songEntity by sharedViewModel.nowPlayingState.map { it?.songEntity }.collectAsState(null)
+    val songEntity by remember(sharedViewModel) {
+        sharedViewModel.nowPlayingState.map { it?.songEntity }
+    }.collectAsState(null)
     val queueData by musicServiceHandler.queueData.collectAsStateWithLifecycle()
     val queue by remember {
         derivedStateOf {
@@ -991,7 +995,9 @@ fun QueueBottomSheet(
             queueData?.queueState ?: QueueData.StateSource.STATE_CREATED
         }
     }
-    val endlessQueueEnable by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsState(false)
+    val endlessQueueEnable by remember(dataStoreManager) {
+        dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }
+    }.collectAsState(false)
 
     val shouldLoadMore =
         remember {

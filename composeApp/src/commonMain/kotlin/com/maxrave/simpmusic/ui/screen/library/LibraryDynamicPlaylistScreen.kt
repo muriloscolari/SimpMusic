@@ -178,7 +178,8 @@ fun LibraryDynamicPlaylistScreen(
         parsed.topListRange()?.let { (start, end) -> analyticsViewModel.showRange(start, end) }
     }
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, showSearchBar) {
+        if (query.isEmpty() || !showSearchBar) return@LaunchedEffect
         tempFavorite = favorite.filter { it.matches(query) }
         tempFollowed = followed.filter { it.name.contains(query, ignoreCase = true) }
         tempMostPlayed = mostPlayed.filter { it.matches(query) }
@@ -221,6 +222,7 @@ fun LibraryDynamicPlaylistScreen(
                     followed
                 },
                 key = { it.channelId },
+                contentType = { "artist_item" },
             ) { artist ->
                 ArtistFullWidthItems(
                     artist,
@@ -243,7 +245,8 @@ fun LibraryDynamicPlaylistScreen(
                         } else {
                             data
                         },
-                        key = { it.first.hashCode() },
+                        key = { it.second.channelId },
+                        contentType = { "artist_item" },
                     ) { artist ->
                         ArtistFullWidthItems(
                             artist.second,
@@ -278,7 +281,8 @@ fun LibraryDynamicPlaylistScreen(
                         } else {
                             data
                         },
-                        key = { it.first.hashCode() },
+                        key = { it.second.browseId },
+                        contentType = { "album_item" },
                     ) { album ->
                         PlaylistFullWidthItems(
                             album.second,
@@ -313,7 +317,8 @@ fun LibraryDynamicPlaylistScreen(
                         } else {
                             data
                         },
-                        key = { it.hashCode() },
+                        key = { it.second.videoId },
+                        contentType = { "song_item" },
                     ) { song ->
                         SongFullWidthItems(
                             songEntity = song.second,
@@ -429,7 +434,8 @@ fun LibraryDynamicPlaylistScreen(
                         }
                     }
                 },
-                key = { it.hashCode() },
+                key = { it.videoId },
+                contentType = { "song_item" },
             ) { song ->
                 SongFullWidthItems(
                     songEntity = song,

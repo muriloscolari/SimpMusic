@@ -162,6 +162,7 @@ import com.maxrave.simpmusic.ui.icon.Sort
 import com.maxrave.simpmusic.ui.icon.TipsAndUpdates
 import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
 import com.maxrave.simpmusic.ui.theme.seed
+import com.maxrave.simpmusic.ui.theme.LocalLiquidGlassEnabled
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.LocalPlaylistUIEvent
 import com.maxrave.simpmusic.viewModel.LocalPlaylistViewModel
@@ -226,40 +227,13 @@ fun LocalPlaylistScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val aiPainter = rememberVectorPainter(SimpIcons.TipsAndUpdates)
-    val limit = 1.5f
-    val transition = rememberInfiniteTransition(label = "shimmer")
-    val progressAnimated by transition.animateFloat(
-        initialValue = -limit,
-        targetValue = limit,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(5000, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "shimmer",
-    )
-    val infiniteTransition = rememberInfiniteTransition(label = "rotation")
-    val angle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(5000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "rotation",
-    )
-
     val lazyState = rememberLazyListState()
     val firstItemVisible by remember {
         derivedStateOf {
             lazyState.firstVisibleItemIndex == 0
         }
     }
-    val downloadState by viewModel.uiState.map { it.downloadState }.collectAsState(
-        initial = DownloadState.STATE_NOT_DOWNLOADED,
-    )
+    val downloadState = uiState.downloadState
     var shouldHideTopBar by rememberSaveable { mutableStateOf(false) }
     var shouldShowSuggestions by rememberSaveable { mutableStateOf(false) }
 
@@ -269,11 +243,16 @@ fun LocalPlaylistScreen(
     var showSelectionAddToPlaylist by rememberSaveable { mutableStateOf(false) }
     var shouldShowSuggestButton by rememberSaveable { mutableStateOf(false) }
 
-    val playingTrack by sharedViewModel.nowPlayingState
-        .mapLatest {
-            it?.songEntity
-        }.collectAsState(initial = null)
-    val isPlaying by sharedViewModel.controllerState.map { it.isPlaying }.collectAsState(initial = false)
+    val playingVideoId by remember(sharedViewModel) {
+        sharedViewModel.nowPlayingState
+            .map { it?.songEntity?.videoId }
+            .distinctUntilChanged()
+    }.collectAsState(initial = null)
+    val isPlaying by remember(sharedViewModel) {
+        sharedViewModel.controllerState
+            .map { it.isPlaying }
+            .distinctUntilChanged()
+    }.collectAsState(initial = false)
 
     val queueData by sharedViewModel.getQueueDataState().collectAsStateWithLifecycle()
     val playingPlaylistId by remember {
@@ -282,7 +261,7 @@ fun LocalPlaylistScreen(
         }
     }
 
-    val suggestedTracks by viewModel.uiState.map { it.suggestions?.songs ?: emptyList() }.collectAsState(initial = emptyList())
+    val suggestedTracks = uiState.suggestions?.songs ?: emptyList()
     val suggestionsLoading by viewModel.loading.collectAsStateWithLifecycle()
     var showSyncAlertDialog by rememberSaveable { mutableStateOf(false) }
     var showUnsyncAlertDialog by rememberSaveable { mutableStateOf(false) }
@@ -444,63 +423,68 @@ fun LocalPlaylistScreen(
             Modifier
                 .fillMaxWidth()
                 .background(mutedPaletteBg)
-                .hazeSource(hazeState)
-                .pointerInput(changingOrder) {
-                    if (!changingOrder) return@pointerInput
-                    val onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, offset: Offset) -> Unit =
-                        { change, offset ->
-                            Logger.d(TAG, "onDrag $offset")
-                            change.consume()
-                            dragDropState.onDrag(offset = offset)
+                .then(if (LocalLiquidGlassEnabled.current) Modifier.hazeSource(hazeState) else Modifier)
+                .then(
+                    if (changingOrder) {
+                        Modifier.pointerInput(changingOrder) {
+                            val onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, offset: Offset) -> Unit =
+                                { change, offset ->
+                                    Logger.d(TAG, "onDrag $offset")
+                                    change.consume()
+                                    dragDropState.onDrag(offset = offset)
 
-                            if (overscrollJob?.isActive != true) {
-                                dragDropState
-                                    .checkForOverScroll()
-                                    .takeIf { it != 0f }
-                                    ?.let {
-                                        overscrollJob =
-                                            coroutineScope.launch {
-                                                dragDropState.state.animateScrollBy(
-                                                    it * 1.3f,
-                                                    tween(easing = FastOutLinearInEasing),
-                                                )
+                                    if (overscrollJob?.isActive != true) {
+                                        dragDropState
+                                            .checkForOverScroll()
+                                            .takeIf { it != 0f }
+                                            ?.let {
+                                                overscrollJob =
+                                                    coroutineScope.launch {
+                                                        dragDropState.state.animateScrollBy(
+                                                            it * 1.3f,
+                                                            tween(easing = FastOutLinearInEasing),
+                                                        )
+                                                    }
                                             }
+                                            ?: run { overscrollJob?.cancel() }
                                     }
-                                    ?: run { overscrollJob?.cancel() }
+                                }
+                            val onDragStart: (Offset) -> Unit = { offset ->
+                                Logger.d(TAG, "onDragStart $offset")
+                                dragDropState.onDragStart(offset)
+                            }
+                            val onDragEnd: () -> Unit = {
+                                Logger.d(TAG, "onDragEnd")
+                                dragDropState.onDragInterrupted(true)
+                                overscrollJob?.cancel()
+                            }
+                            val onDragCancel: () -> Unit = {
+                                Logger.d(TAG, "onDragCancel")
+                                dragDropState.onDragInterrupted()
+                                overscrollJob?.cancel()
+                            }
+                            if (getPlatform() == Platform.Desktop) {
+                                // Desktop: normal drag (click-and-drag), no long press needed
+                                detectDragGestures(
+                                    onDrag = onDrag,
+                                    onDragStart = onDragStart,
+                                    onDragEnd = onDragEnd,
+                                    onDragCancel = onDragCancel,
+                                )
+                            } else {
+                                // Android: long press then drag (touch-friendly)
+                                detectDragGesturesAfterLongPress(
+                                    onDrag = onDrag,
+                                    onDragStart = onDragStart,
+                                    onDragEnd = onDragEnd,
+                                    onDragCancel = onDragCancel,
+                                )
                             }
                         }
-                    val onDragStart: (Offset) -> Unit = { offset ->
-                        Logger.d(TAG, "onDragStart $offset")
-                        dragDropState.onDragStart(offset)
-                    }
-                    val onDragEnd: () -> Unit = {
-                        Logger.d(TAG, "onDragEnd")
-                        dragDropState.onDragInterrupted(true)
-                        overscrollJob?.cancel()
-                    }
-                    val onDragCancel: () -> Unit = {
-                        Logger.d(TAG, "onDragCancel")
-                        dragDropState.onDragInterrupted()
-                        overscrollJob?.cancel()
-                    }
-                    if (getPlatform() == Platform.Desktop) {
-                        // Desktop: normal drag (click-and-drag), no long press needed
-                        detectDragGestures(
-                            onDrag = onDrag,
-                            onDragStart = onDragStart,
-                            onDragEnd = onDragEnd,
-                            onDragCancel = onDragCancel,
-                        )
                     } else {
-                        // Android: long press then drag (touch-friendly)
-                        detectDragGesturesAfterLongPress(
-                            onDrag = onDrag,
-                            onDragStart = onDragStart,
-                            onDragEnd = onDragEnd,
-                            onDragCancel = onDragCancel,
-                        )
+                        Modifier
                     }
-                },
+                ),
         state = lazyState,
     ) {
         item(contentType = "header") {
@@ -647,39 +631,7 @@ fun LocalPlaylistScreen(
                                                     shouldShowSuggestions = !shouldShowSuggestions
                                                 },
                                             ) {
-                                                Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .size(24.dp)
-                                                            .graphicsLayer {
-                                                                compositingStrategy = CompositingStrategy.Offscreen
-                                                            }.drawWithContent {
-                                                                val width = size.width
-                                                                val height = size.height
-                                                                val offsetDraw = width * progressAnimated
-                                                                val brush =
-                                                                    Brush.linearGradient(
-                                                                        colors =
-                                                                            listOf(
-                                                                                Color(0xFF4C82EF),
-                                                                                Color(0xFFD96570),
-                                                                            ),
-                                                                        start = Offset(offsetDraw, 0f),
-                                                                        end =
-                                                                            Offset(
-                                                                                offsetDraw + width,
-                                                                                height,
-                                                                            ),
-                                                                    )
-                                                                with(aiPainter) {
-                                                                    draw(size = Size(width, height))
-                                                                }
-                                                                drawRect(
-                                                                    brush = brush,
-                                                                    blendMode = BlendMode.SrcIn,
-                                                                )
-                                                            },
-                                                )
+                                                SuggestAiIcon()
                                             }
                                         }
                                         IconButton(
@@ -979,39 +931,7 @@ fun LocalPlaylistScreen(
                                                 shouldShowSuggestions = !shouldShowSuggestions
                                             },
                                         ) {
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .size(24.dp)
-                                                        .graphicsLayer {
-                                                            compositingStrategy = CompositingStrategy.Offscreen
-                                                        }.drawWithContent {
-                                                            val width = size.width
-                                                            val height = size.height
-                                                            val offsetDraw = width * progressAnimated
-                                                            val brush =
-                                                                Brush.linearGradient(
-                                                                    colors =
-                                                                        listOf(
-                                                                            Color(0xFF4C82EF),
-                                                                            Color(0xFFD96570),
-                                                                        ),
-                                                                    start = Offset(offsetDraw, 0f),
-                                                                    end =
-                                                                        Offset(
-                                                                            offsetDraw + width,
-                                                                            height,
-                                                                        ),
-                                                                )
-                                                            with(aiPainter) {
-                                                                draw(size = Size(width, height))
-                                                            }
-                                                            drawRect(
-                                                                brush = brush,
-                                                                blendMode = BlendMode.SrcIn,
-                                                            )
-                                                        },
-                                            )
+                                            SuggestAiIcon()
                                         }
                                     }
                                     IconButton(
@@ -1248,7 +1168,7 @@ fun LocalPlaylistScreen(
                                                         SuggestItems(
                                                             forceDark = true,
                                                             track = track,
-                                                            isPlaying = playingTrack?.videoId == track.videoId,
+                                                            isPlaying = playingVideoId == track.videoId,
                                                             onAddClickListener = {
                                                                 viewModel.addSuggestTrackToListTrack(
                                                                     track,
@@ -1332,60 +1252,43 @@ fun LocalPlaylistScreen(
                 }
             }
         }
-        items(count = trackPagingItems.itemCount, key = { index ->
-            val item = trackPagingItems[index]
-            (item?.first?.videoId ?: "") + "item_$index" + item?.second?.inPlaylist + item?.second?.position
-        }) { index ->
+        items(
+            count = trackPagingItems.itemCount,
+            key = { index ->
+                val item = trackPagingItems.peek(index)
+                if (item != null) {
+                    item.first.videoId + "_" + (item.second.inPlaylist ?: "") + "_" + (item.second.position ?: index)
+                } else {
+                    "placeholder_$index"
+                }
+            },
+            contentType = { "local_playlist_song_item" },
+        ) { index ->
             val item = trackPagingItems[index]?.first
             if (item != null) {
                 val content = @Composable { mod: Modifier ->
-                    if (playingTrack?.videoId == item.videoId && isPlaying) {
-                        SongFullWidthItems(
-                            forceDark = true,
-                            isPlaying = true,
-                            shouldShowDragHandle = changingOrder,
-                            songEntity = item,
-                            onMoreClickListener = { onItemMoreClick(it) },
-                            onClickListener = {
-                                Logger.w("PlaylistScreen", "index: $index")
-                                onPlaylistItemClick(it)
-                            },
-                            onAddToQueue = {
-                                sharedViewModel.addListToQueue(
-                                    arrayListOf(item.toTrack()),
-                                )
-                            },
-                            selectionMode = selectionState.isActive,
-                            isSelected = selectionState.isSelected(item.videoId),
-                            // No long press while reordering: that gesture already belongs to drag.
-                            onLongClick = if (changingOrder) null else ({ selectionState.start(it) }),
-                            onSelectToggle = { selectionState.toggle(it) },
-                            modifier = mod,
-                        )
-                    } else {
-                        SongFullWidthItems(
-                            forceDark = true,
-                            isPlaying = false,
-                            shouldShowDragHandle = changingOrder,
-                            songEntity = item,
-                            onMoreClickListener = { onItemMoreClick(it) },
-                            onClickListener = {
-                                Logger.w("PlaylistScreen", "index: $index")
-                                onPlaylistItemClick(it)
-                            },
-                            onAddToQueue = {
-                                sharedViewModel.addListToQueue(
-                                    arrayListOf(item.toTrack()),
-                                )
-                            },
-                            selectionMode = selectionState.isActive,
-                            isSelected = selectionState.isSelected(item.videoId),
-                            // No long press while reordering: that gesture already belongs to drag.
-                            onLongClick = if (changingOrder) null else ({ selectionState.start(it) }),
-                            onSelectToggle = { selectionState.toggle(it) },
-                            modifier = mod,
-                        )
-                    }
+                    SongFullWidthItems(
+                        forceDark = true,
+                        isPlaying = playingVideoId == item.videoId && isPlaying,
+                        shouldShowDragHandle = changingOrder,
+                        songEntity = item,
+                        onMoreClickListener = { onItemMoreClick(it) },
+                        onClickListener = {
+                            Logger.w("PlaylistScreen", "index: $index")
+                            onPlaylistItemClick(it)
+                        },
+                        onAddToQueue = {
+                            sharedViewModel.addListToQueue(
+                                arrayListOf(item.toTrack()),
+                            )
+                        },
+                        selectionMode = selectionState.isActive,
+                        isSelected = selectionState.isSelected(item.videoId),
+                        // No long press while reordering: that gesture already belongs to drag.
+                        onLongClick = if (changingOrder) null else ({ selectionState.start(it) }),
+                        onSelectToggle = { selectionState.toggle(it) },
+                        modifier = mod,
+                    )
                 }
                 if (changingOrder) {
                     DraggableItem(
@@ -1396,7 +1299,7 @@ fun LocalPlaylistScreen(
                         content(Modifier)
                     }
                 } else {
-                    Column(modifier = Modifier.animateItem()) {
+                    Column {
                         content(Modifier)
                         if (index < trackPagingItems.itemCount - 1) {
                             HorizontalDivider(
@@ -1676,10 +1579,11 @@ fun LocalPlaylistScreen(
                 items(
                     searchResults,
                     key = { (song, pair) -> song.videoId + "_" + pair.position },
+                    contentType = { "local_playlist_search_song_item" },
                 ) { (song, _) ->
                     SongFullWidthItems(
                         forceDark = true,
-                        isPlaying = playingTrack?.videoId == song.videoId && isPlaying,
+                        isPlaying = playingVideoId == song.videoId && isPlaying,
                         songEntity = song,
                         onMoreClickListener = { onItemMoreClick(it) },
                         onClickListener = { onPlaylistItemClick(it) },
@@ -1742,4 +1646,54 @@ fun LocalPlaylistScreen(
                 Modifier.hazeBlur(HazeInput.Sources(hazeState), barBlurStyle(mutedPaletteBg, 0.55f)),
         )
     }
+}
+
+@Composable
+private fun SuggestAiIcon() {
+    val aiPainter = rememberVectorPainter(SimpIcons.TipsAndUpdates)
+    val limit = 1.5f
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val progressAnimated by transition.animateFloat(
+        initialValue = -limit,
+        targetValue = limit,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(5000, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "shimmer",
+    )
+    Box(
+        modifier =
+            Modifier
+                .size(24.dp)
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }.drawWithContent {
+                    val width = size.width
+                    val height = size.height
+                    val offsetDraw = width * progressAnimated
+                    val brush =
+                        Brush.linearGradient(
+                            colors =
+                                listOf(
+                                    Color(0xFF4C82EF),
+                                    Color(0xFFD96570),
+                                ),
+                            start = Offset(offsetDraw, 0f),
+                            end =
+                                Offset(
+                                    offsetDraw + width,
+                                    height,
+                                ),
+                        )
+                    with(aiPainter) {
+                        draw(size = Size(width, height))
+                    }
+                    drawRect(
+                        brush = brush,
+                        blendMode = BlendMode.SrcIn,
+                    )
+                },
+    )
 }
