@@ -580,4 +580,8 @@
     <string name="month_full_oct">Outubro</string>
     <string name="month_full_nov">Novembro</string>
     <string name="month_full_dec">Dezembro</string>
+    <string name="max_parallel_downloads">Downloads simultâneos</string>
+    <string name="max_parallel_downloads_custom">Personalizado (1–20)</string>
+    <string name="max_parallel_downloads_warning">Colocar mais do que 5 downloads simultâneos pode deixar o aplicativo muito lento ou causar travamentos enquanto estiver baixando.</string>
+    <string name="max_parallel_downloads_invalid">Digite um valor entre 1 e 20</string>
 </resources>

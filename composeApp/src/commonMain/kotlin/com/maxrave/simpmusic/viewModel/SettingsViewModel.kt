@@ -229,6 +229,9 @@ class SettingsViewModel(
     private val _videoDownloadQuality = MutableStateFlow<String?>(null)
     val videoDownloadQuality: StateFlow<String?> = _videoDownloadQuality
 
+    private val _maxParallelDownloads = MutableStateFlow<Int>(3)
+    val maxParallelDownloads: StateFlow<Int> = _maxParallelDownloads
+
     private val _localTrackingEnabled = MutableStateFlow<Boolean>(false)
     val localTrackingEnabled: StateFlow<Boolean> = _localTrackingEnabled
 
@@ -339,6 +342,7 @@ class SettingsViewModel(
         getCombineLocalAndYouTubeLiked()
         getDownloadQuality()
         getVideoDownloadQuality()
+        getMaxParallelDownloads()
         getLocalTrackingEnabled()
         getBlogNotificationEnabled()
         getAutoBackupEnabled()
@@ -417,6 +421,20 @@ class SettingsViewModel(
                 dataStoreManager.setVideoDownloadQuality(quality)
             }
             getVideoDownloadQuality()
+        }
+    }
+
+    private fun getMaxParallelDownloads() {
+        viewModelScope.launch {
+            dataStoreManager.maxParallelDownloads.collect { count ->
+                _maxParallelDownloads.value = count
+            }
+        }
+    }
+
+    fun setMaxParallelDownloads(count: Int) {
+        viewModelScope.launch {
+            dataStoreManager.setMaxParallelDownloads(count.coerceIn(1, 20))
         }
     }
 

@@ -59,6 +59,7 @@
     </queries>
 
     <application
+        android:largeHeap="true"
         android:name=".SimpMusicApplication"
         android:allowBackup="true"
         android:appCategory="audio"
