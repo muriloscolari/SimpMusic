@@ -88,6 +88,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.cancellable
@@ -730,11 +731,7 @@ class SharedViewModel(
      * the whole settings file (the playback position is saved every few seconds), so only a change
      * to this block's own text gets through.
      */
-    fun cachedPromos(): Flow<List<Promo>> =
-        dataStoreManager
-            .getString(Promo.cacheKey(appIdentity.isDevBuild))
-            .distinctUntilChanged()
-            .map(::decodePromos)
+    fun cachedPromos(): Flow<List<Promo>> = flowOf(emptyList())
 
     /** The ids of the launch banners this app version has already shown. */
     suspend fun shownPromos(): Set<String> =
