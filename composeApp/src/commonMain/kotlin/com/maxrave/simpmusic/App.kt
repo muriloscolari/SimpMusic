@@ -356,6 +356,24 @@ fun App(
                         }
                     }
 
+                    // simpmusic://player — launched when tapping the playback widget.
+                    // Opens the expanded Now Playing screen if a song is currently playing,
+                    // or navigates to the Home screen when nothing is playing.
+                    "player" -> {
+                        if (viewModel.isCurrentlyPlaying()) {
+                            isShowNowPlaylistScreen = true
+                        } else {
+                            isShowNowPlaylistScreen = false
+                            navController.navigate(HomeDestination) {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+
                     else -> {
                         viewModel.makeToast(getString(Res.string.this_link_is_not_supported))
                     }

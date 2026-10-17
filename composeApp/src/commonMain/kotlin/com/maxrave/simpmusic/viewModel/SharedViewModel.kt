@@ -213,6 +213,10 @@ class SharedViewModel(
     private var _nowPlayingState = MutableStateFlow<NowPlayingTrackState?>(null)
     val nowPlayingState: StateFlow<NowPlayingTrackState?> = _nowPlayingState
 
+    fun isCurrentlyPlaying(): Boolean =
+        mediaPlayerHandler.controlState.value.isPlaying &&
+            mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
+
     fun getQueueDataState() = mediaPlayerHandler.queueData
 
     val castState: StateFlow<GenericCastState> get() = mediaPlayerHandler.castState
