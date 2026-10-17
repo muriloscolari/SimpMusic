@@ -317,6 +317,7 @@ val conveyorMakeLinuxApp =
             "--agree-to-license=1",
             "-Kapp.machines=linux.amd64.glibc",
             "make",
+            "--overwrite=HARD_REPLACE",
             "linux-app",
         )
         standardInput = System.`in`
