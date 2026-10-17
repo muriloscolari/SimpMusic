@@ -112,12 +112,13 @@ jobs:
           mkdir -p release_assets
 
           # Android APKs
-          if [ -f androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk ]; then
-            cp androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk release_assets/SimpMusic-v${VERSION}-arm64-v8a.apk
-          fi
-          if [ -f androidApp/build/outputs/apk/release/androidApp-universal-release.apk ]; then
-            cp androidApp/build/outputs/apk/release/androidApp-universal-release.apk release_assets/SimpMusic-v${VERSION}-universal.apk
-          fi
+          for apk in androidApp/build/outputs/apk/release/*.apk; do
+            [ -f "$apk" ] || continue
+            base=$(basename "$apk" .apk)
+            arch=${base#androidApp-}
+            arch=${arch%-release}
+            cp "$apk" "release_assets/SimpMusic-v${VERSION}-${arch}.apk"
+          done
 
           # Linux AppImage
           appimage=$(ls desktopApp/build/appimage/conveyor/SimpMusic-*.AppImage 2>/dev/null | head -1)
@@ -141,16 +142,19 @@ jobs:
         run: |
           TAG="custom-v${VERSION}-${SHORT_SHA}"
           TITLE="SimpMusic v${VERSION} (${SHORT_SHA})"
-          BODY="Automated build for branch **custom** at commit \`${SHORT_SHA}\`.
 
-### Arquivos incluídos:
-- **Android (ARM64)**: \`SimpMusic-v${VERSION}-arm64-v8a.apk\` (recomendado para a maioria dos celulares modernos)
-- **Android (Universal)**: \`SimpMusic-v${VERSION}-universal.apk\` (compatível com qualquer arquitetura)
-- **Linux (AppImage)**: \`SimpMusic-v${VERSION}-Linux-x86_64.AppImage\` (executável direto no Linux)
-- **Windows (Instalador)**: \`SimpMusic-v${VERSION}-Windows-x64-installer.zip\` (extraia o ZIP e dê dois cliques em \`install.bat\`)"
+          cat << EOF > release_notes.md
+          Automated build for branch **custom** at commit \`${SHORT_SHA}\`.
+
+          ### Arquivos incluídos:
+          - **Android (ARM64)**: \`SimpMusic-v${VERSION}-arm64-v8a.apk\` (recomendado para celulares modernos)
+          - **Android (Universal)**: \`SimpMusic-v${VERSION}-universal.apk\` (compatível com qualquer arquitetura)
+          - **Linux (AppImage)**: \`SimpMusic-v${VERSION}-Linux-x86_64.AppImage\` (executável direto no Linux)
+          - **Windows (Instalador)**: \`SimpMusic-v${VERSION}-Windows-x64-installer.zip\` (extraia o ZIP e execute install.bat)
+          EOF
 
           echo "Publishing release $TAG..."
           gh release create "$TAG" release_assets/* \
             --title "$TITLE" \
-            --notes "$BODY" \
+            --notes-file release_notes.md \
             --prerelease=false
