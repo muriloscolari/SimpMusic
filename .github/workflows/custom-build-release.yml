@@ -65,48 +65,22 @@ jobs:
       - name: Generate Conveyor config
         run: ./gradlew :desktopApp:writeConveyorConfig --no-configuration-cache
 
-      - name: Install Conveyor & Configure Signing Key
-        env:
-          CONVEYOR_AGREE_TO_LICENSE: "1"
-          CONVEYOR_SIGNING_KEY: ${{ secrets.CONVEYOR_SIGNING_KEY }}
-        run: |
-          if [ ! -d ".conveyor/install/conveyor-22.0" ]; then
-            wget -q https://downloads.hydraulic.dev/conveyor/conveyor-22.0-linux-amd64.tar.gz
-            mkdir -p .conveyor/install
-            tar xzf conveyor-22.0-linux-amd64.tar.gz -C .conveyor/install
-          fi
-          echo "$PWD/.conveyor/install/conveyor-22.0/bin" >> "$GITHUB_PATH"
-          if [ -z "$CONVEYOR_SIGNING_KEY" ]; then
-            export CONVEYOR_PASSPHRASE="simpmusic-custom-build"
-            "$PWD/.conveyor/install/conveyor-22.0/bin/conveyor" --passphrase=env:CONVEYOR_PASSPHRASE keys generate
-          fi
-
       - name: Run Conveyor (Linux App)
-        env:
-          CONVEYOR_AGREE_TO_LICENSE: "1"
-          CONVEYOR_SIGNING_KEY: ${{ secrets.CONVEYOR_SIGNING_KEY }}
-          CONVEYOR_PASSPHRASE: "simpmusic-custom-build"
-        run: |
-          if [ -n "$CONVEYOR_SIGNING_KEY" ]; then
-            conveyor --cache-dir=".conveyor/cache" "-Kapp.signing-key=$CONVEYOR_SIGNING_KEY" -Kapp.machines=linux.amd64.glibc make linux-app
-          else
-            conveyor --cache-dir=".conveyor/cache" --passphrase=env:CONVEYOR_PASSPHRASE -Kapp.machines=linux.amd64.glibc make linux-app
-          fi
+        uses: hydraulic-software/conveyor/actions/build@v22.0
+        with:
+          command: -Kapp.machines=linux.amd64.glibc make linux-app
+          agree_to_license: 1
+          signing_key: ${{ secrets.CONVEYOR_SIGNING_KEY || 'loud apology vital team rent champion better pluck cargo love knee tornado tomato man mammal lake sick possible ozone giggle suggest sail aunt multiply/2022-08-09T12:07:08Z' }}
 
       - name: Package Linux AppImage
         run: ./gradlew :desktopApp:packageConveyorAppImage --no-configuration-cache
 
       - name: Run Conveyor (Windows MSIX)
-        env:
-          CONVEYOR_AGREE_TO_LICENSE: "1"
-          CONVEYOR_SIGNING_KEY: ${{ secrets.CONVEYOR_SIGNING_KEY }}
-          CONVEYOR_PASSPHRASE: "simpmusic-custom-build"
-        run: |
-          if [ -n "$CONVEYOR_SIGNING_KEY" ]; then
-            conveyor --cache-dir=".conveyor/cache" "-Kapp.signing-key=$CONVEYOR_SIGNING_KEY" '-Kapp.machines=[windows.amd64]' make site
-          else
-            conveyor --cache-dir=".conveyor/cache" --passphrase=env:CONVEYOR_PASSPHRASE '-Kapp.machines=[windows.amd64]' make site
-          fi
+        uses: hydraulic-software/conveyor/actions/build@v22.0
+        with:
+          command: '-Kapp.machines=[windows.amd64] make site'
+          agree_to_license: 1
+          signing_key: ${{ secrets.CONVEYOR_SIGNING_KEY || 'loud apology vital team rent champion better pluck cargo love knee tornado tomato man mammal lake sick possible ozone giggle suggest sail aunt multiply/2022-08-09T12:07:08Z' }}
 
       - name: Bundle Windows offline installer
         run: |
