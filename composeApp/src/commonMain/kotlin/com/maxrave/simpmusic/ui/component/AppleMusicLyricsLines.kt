@@ -203,7 +203,7 @@ fun Modifier.appleMusicLyricFocus(
             else -> (1f - distance * ALPHA_FALLOFF_PER_LINE).coerceAtLeast(MIN_LINE_ALPHA)
         }
 
-    val blurRadiusState = animateDpAsState(targetValue = targetBlur, animationSpec = tween(400), label = "appleMusicLyricBlur")
+    val blurRadiusState = animateDpAsState(targetValue = targetBlur, animationSpec = tween(if (blurEnabled) 400 else 100), label = "appleMusicLyricBlur")
     val lineAlphaState = animateFloatAsState(targetValue = targetAlpha, animationSpec = tween(400), label = "appleMusicLyricAlpha")
 
     val edge =

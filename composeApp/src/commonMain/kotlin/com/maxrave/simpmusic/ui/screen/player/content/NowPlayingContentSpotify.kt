@@ -2072,26 +2072,22 @@ internal fun ColumnScope.SpotifyPlaybackControls(
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Left,
         )
-        // Sweep head for the "Crossfading" shimmer, 0..1. Runs
-        // unconditionally: behind the crossfade check it would
-        // restart from zero each time the label appears (same
-        // rationale as MiniPlayer's crossfadeSweep).
-        val sweepTransition = rememberInfiniteTransition(label = "nowPlayingCrossfadeSweep")
-        val crossfadeSweep by sweepTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(3200, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-            label = "nowPlayingSweepHead",
-        )
         AnimatedVisibility(
             enter = fadeIn(),
             exit = fadeOut(),
             visible = state.timelineState.isCrossfading,
         ) {
+            val sweepTransition = rememberInfiniteTransition(label = "nowPlayingCrossfadeSweep")
+            val crossfadeSweep by sweepTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(3200, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "nowPlayingSweepHead",
+            )
             // Same effect as the desktop MiniPlayer label: a
             // highlight sweeping through the glyphs via a text
             // brush — no overlay, no clipping.

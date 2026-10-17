@@ -218,7 +218,12 @@ fun NowPlayingContentAppleMusic(
     val panelBackdrop = rememberBackdrop(Color.Black)
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        Box(modifier = Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
+        Box(
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .then(if (getPlatform() == Platform.Desktop) Modifier.layerBackdrop(panelBackdrop) else Modifier),
+        ) {
             val meshPage = viewState == AppleMusicView.MAIN && !fullscreenCanvas && !isVideoBackdrop
             AppleMusicArtworkBackdrop(
                 thumbnailURL = state.screenData.thumbnailURL,

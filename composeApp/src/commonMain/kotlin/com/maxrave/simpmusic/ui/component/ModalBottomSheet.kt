@@ -1640,9 +1640,11 @@ fun NowPlayingBottomSheet(
                                 ImageRequest
                                     .Builder(LocalPlatformContext.current)
                                     .data(thumb)
+                                    .memoryCachePolicy(CachePolicy.ENABLED)
+                                    .memoryCacheKey(thumb)
                                     .diskCachePolicy(CachePolicy.ENABLED)
                                     .diskCacheKey(thumb)
-                                    .crossfade(550)
+                                    .crossfade(false)
                                     .build(),
                             placeholder = rememberHolderPainter(),
                             error = rememberHolderPainter(),
@@ -1667,8 +1669,10 @@ fun NowPlayingBottomSheet(
                                 modifier =
                                     Modifier
                                         .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
+                                        .basicMarquee(
+                                            animationMode = MarqueeAnimationMode.Immediately,
+                                            initialDelayMillis = 400,
+                                        ).focusable(),
                             )
                             Text(
                                 text =
@@ -1681,8 +1685,10 @@ fun NowPlayingBottomSheet(
                                 modifier =
                                     Modifier
                                         .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
+                                        .basicMarquee(
+                                            animationMode = MarqueeAnimationMode.Immediately,
+                                            initialDelayMillis = 400,
+                                        ).focusable(),
                             )
                         }
                     }

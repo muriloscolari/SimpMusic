@@ -324,9 +324,15 @@ fun SongFullWidthItems(
                             Modifier
                                 .fillMaxWidth()
                                 .wrapContentHeight(align = Alignment.CenterVertically)
-                                .basicMarquee(
-                                    iterations = Int.MAX_VALUE,
-                                    animationMode = MarqueeAnimationMode.Immediately,
+                                .then(
+                                    if (isPlaying && !LocalNowPlayingOpen.current) {
+                                        Modifier.basicMarquee(
+                                            iterations = Int.MAX_VALUE,
+                                            animationMode = MarqueeAnimationMode.Immediately,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
                                 ).focusable(),
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {

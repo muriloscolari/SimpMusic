@@ -82,8 +82,9 @@ actual fun LiquidGlassAppBottomNavigationBar(
 ) {
     val layer = rememberGraphicsLayer()
     val searchFabInteraction = rememberGlassInteraction()
+    val isNowPlayingOpen = com.maxrave.simpmusic.ui.component.LocalNowPlayingOpen.current
     // Only the glass reads what is behind it.
-    val luminance = rememberGlassLuminance(layer, enabled = liquidGlass)
+    val luminance = rememberGlassLuminance(layer, enabled = liquidGlass && !isNowPlayingOpen)
 
     val nowPlayingData by viewModel.nowPlayingState.collectAsStateWithLifecycle()
     // MiniPlayer visibility: derived, never stored.
