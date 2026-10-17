@@ -37,10 +37,12 @@ import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
+import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
@@ -73,7 +75,7 @@ private val DEFAULT_COMPACT_WIDGET_BG = Color(0xFF1C1B1F)
  * - Occupies a single vertical cell row (`targetCellHeight="1"`) and stretches to any horizontal width.
  * - Tinted with the dominant colour of the currently playing album cover.
  * - Left: rounded album artwork thumbnail.
- * - Middle: `Song Title • Artist` with single-line ellipsis that expands with horizontal resizing.
+ * - Middle: `Song Title` on top, `Artist` on bottom with single-line ellipsis that expands with horizontal resizing.
  * - Right: Previous, Play/Pause, and Next controls.
  * - Tapping the widget opens SimpMusic directly on the expanded Player screen if a song is playing,
  *   or on the Home screen when nothing is playing.
@@ -172,7 +174,7 @@ class CompactPlayerWidget :
                 val isPlayingNow = controllerState.isPlaying && title.isNotBlank()
                 val openIntent = context.openCompactWidgetIntent(isPlaying = isPlayingNow)
                 val widgetHeight = LocalSize.current.height
-                val artSize = (widgetHeight - 12.dp).coerceIn(36.dp, 52.dp)
+                val artSize = (widgetHeight - 6.dp).coerceIn(44.dp, 64.dp)
 
                 Row(
                     modifier =
@@ -180,7 +182,7 @@ class CompactPlayerWidget :
                             .fillMaxSize()
                             .background(ColorProvider(bgColor))
                             .cornerRadius(android.R.dimen.system_app_widget_background_radius)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(start = 6.dp, end = 8.dp, top = 3.dp, bottom = 3.dp)
                             .clickable(
                                 actionStartActivity(openIntent),
                                 rippleOverride = R.drawable.no_ripple,
@@ -216,35 +218,41 @@ class CompactPlayerWidget :
                         }
                     }
 
-                    // Middle: Song title followed by artist with separator
-                    val displayText =
-                        if (title.isNotBlank()) {
-                            if (artist.isNotBlank()) "$title • $artist" else title
-                        } else {
-                            context.getString(R.string.app_name)
-                        }
-
-                    Box(
+                    // Middle: Song title on top, artist on bottom
+                    Column(
                         modifier =
                             GlanceModifier
                                 .defaultWeight()
-                                .padding(horizontal = 12.dp)
+                                .padding(start = 10.dp, end = 6.dp)
                                 .clickable(
                                     actionStartActivity(openIntent),
                                     rippleOverride = R.drawable.no_ripple,
                                 ),
-                        contentAlignment = Alignment.CenterStart,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = displayText,
+                            text = title.ifBlank { context.getString(R.string.app_name) },
                             maxLines = 1,
                             style =
                                 TextStyle(
                                     color = ColorProvider(Color.White),
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.Bold,
                                 ),
                         )
+                        if (artist.isNotBlank()) {
+                            Spacer(GlanceModifier.height(2.dp))
+                            Text(
+                                text = artist,
+                                maxLines = 1,
+                                style =
+                                    TextStyle(
+                                        color = ColorProvider(Color.White.copy(alpha = 0.75f)),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Normal,
+                                    ),
+                            )
+                        }
                     }
 
                     // Right: Previous, Play/Pause, Next controls
