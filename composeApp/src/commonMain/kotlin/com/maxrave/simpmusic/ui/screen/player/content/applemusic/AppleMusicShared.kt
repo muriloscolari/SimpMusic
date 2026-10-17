@@ -427,24 +427,46 @@ internal fun AppleMusicCompactHeader(
     actions: NowPlayingContentActions,
     typography: AppleMusicTypography,
     modifier: Modifier = Modifier,
+    onReturnToMain: (() -> Unit)? = null,
 ) {
+    val context = LocalPlatformContext.current
+    val thumbUrl = state.screenData.thumbnailURL
+    val imageRequest =
+        remember(context, thumbUrl) {
+            ImageRequest
+                .Builder(context)
+                .data(thumbUrl)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .diskCacheKey(thumbUrl)
+                .crossfade(300)
+                .build()
+        }
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model =
-                ImageRequest
-                    .Builder(LocalPlatformContext.current)
-                    .data(state.screenData.thumbnailURL)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .diskCacheKey(state.screenData.thumbnailURL)
-                    .crossfade(300)
-                    .build(),
+            model = imageRequest,
             placeholder = rememberHolderPainter(),
             error = rememberHolderPainter(),
             contentDescription = null,
-            modifier = Modifier.size(55.dp).clip(RoundedCornerShape(4.dp)),
+            modifier =
+                Modifier
+                    .size(55.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .then(
+                        if (onReturnToMain != null) {
+                            Modifier
+                                .appleMusicPressInflate(pressedScale = 1.08f)
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = onReturnToMain,
+                                )
+                        } else {
+                            Modifier
+                        },
+                    ),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -455,7 +477,20 @@ internal fun AppleMusicCompactHeader(
                 style = typography.compactTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (onReturnToMain != null) {
+                                Modifier.clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = onReturnToMain,
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
             )
             Spacer(modifier = Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

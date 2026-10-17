@@ -65,8 +65,8 @@ import com.maxrave.common.Config.MAIN_PLAYER
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
-import com.maxrave.simpmusic.Platform
 import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
+import com.maxrave.simpmusic.expect.ui.PlatformBackHandler
 import com.maxrave.simpmusic.expect.ui.rememberVideoAspectRatio
 import com.maxrave.simpmusic.extension.GradientAngle
 import com.maxrave.simpmusic.extension.GradientOffset
@@ -371,6 +371,11 @@ fun NowPlayingScreenContent(
     val isInPipMode = rememberIsInPipMode()
 
     val mainScrollState = rememberScrollState()
+    PlatformBackHandler(enabled = mainScrollState.value > 0) {
+        coroutineScope.launch {
+            mainScrollState.animateScrollTo(0)
+        }
+    }
 
     var showHideMiddleLayout by rememberSaveable {
         mutableStateOf(true)
