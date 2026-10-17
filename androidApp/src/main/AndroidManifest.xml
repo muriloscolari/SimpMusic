@@ -59,6 +59,7 @@
     </queries>
 
     <application
+        android:largeHeap="true"
         android:name=".SimpMusicApplication"
         android:allowBackup="true"
         android:appCategory="audio"
@@ -289,6 +290,20 @@
             android:name="io.sentry.auto-init"
             android:value="false" />
 
+
+        <receiver android:name=".ui.widget.CompactPlayerWidgetReceiver"
+            android:label="@string/widget_compact_player_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_PLAY_PAUSE" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_PREVIOUS" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_NEXT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/compact_player_widget_info" />
+        </receiver>
 
         <receiver android:name=".ui.widget.TurntableWidgetReceiver"
             android:label="@string/widget_turntable_label"
