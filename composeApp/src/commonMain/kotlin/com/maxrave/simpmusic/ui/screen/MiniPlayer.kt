@@ -168,10 +168,8 @@ fun MiniPlayer(
     navController: NavController? = null,
 ) {
     val isLiquidGlassEnabled by sharedViewModel.getEnableLiquidGlass().collectAsStateWithLifecycle(DataStoreManager.FALSE)
-    val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
-    val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
-    // The Desktop capsule's quality line between its timestamps — see toAudioQualityLabel.
-    val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
+    val isNowPlayingOpen = com.maxrave.simpmusic.ui.component.LocalNowPlayingOpen.current
+    val isActiveOnScreen = isVisible && (!isNowPlayingOpen || getPlatform() == Platform.Desktop)
 
     val layer = rememberGraphicsLayer()
 
@@ -181,7 +179,7 @@ fun MiniPlayer(
     // 0.12 darken, which is why it looked like a smear rather than glass. The setting still governs
     // the Android card below.
     val useGlassSurface = isLiquidGlassEnabled == DataStoreManager.TRUE || getPlatform() == Platform.Desktop
-    val luminance = rememberGlassLuminance(layer, enabled = useGlassSurface && isVisible)
+    val luminance = rememberGlassLuminance(layer, enabled = useGlassSurface && isActiveOnScreen)
 
     val isDarkTheme = LocalIsDarkTheme.current
     val textColor by animateColorAsState(
@@ -250,22 +248,22 @@ fun MiniPlayer(
                     setIsCrossfading(state.isCrossfading)
                 }
             }
-        val job4 =
-            launch {
-                sharedViewModel.timeline.collect { timeline ->
-                    loading = timeline.loading
-                    val prog =
-                        if (timeline.total > 0L && timeline.current >= 0L) {
-                            timeline.current.toFloat() / timeline.total
-                        } else {
-                            0f
-                        }
-                    setProgress(prog)
-                }
-            }
         job1.join()
         job2.join()
-        job4.join()
+    }
+
+    LaunchedEffect(key1 = isActiveOnScreen) {
+        if (!isActiveOnScreen) return@LaunchedEffect
+        sharedViewModel.timeline.collect { timeline ->
+            loading = timeline.loading
+            val prog =
+                if (timeline.total > 0L && timeline.current >= 0L) {
+                    timeline.current.toFloat() / timeline.total
+                } else {
+                    0f
+                }
+            setProgress(prog)
+        }
     }
 
     if (getPlatform() == Platform.Android) {
@@ -406,7 +404,7 @@ fun MiniPlayer(
                                         trackStroke = ringStroke,
                                         // A raw 0/1, never a tweened value: the node animates amplitude
                                         // itself and drops new targets mid-animation (see WavySeekBar).
-                                        amplitude = { p -> if (p > 0f && isPlaying) 1f else 0f },
+                                        amplitude = { p -> if (p > 0f && isPlaying && isActiveOnScreen) 1f else 0f },
                                     )
                                 }
                                 AsyncImage(
@@ -478,7 +476,7 @@ fun MiniPlayer(
                                                     .wrapContentHeight(
                                                         align = Alignment.CenterVertically,
                                                     ).basicMarquee(
-                                                        iterations = Int.MAX_VALUE,
+                                                        iterations = if (isActiveOnScreen) Int.MAX_VALUE else 0,
                                                         animationMode = MarqueeAnimationMode.Immediately,
                                                     ).focusable(),
                                         )
@@ -503,7 +501,7 @@ fun MiniPlayer(
                                                         .wrapContentHeight(
                                                             align = Alignment.CenterVertically,
                                                         ).basicMarquee(
-                                                            iterations = Int.MAX_VALUE,
+                                                            iterations = if (isActiveOnScreen) Int.MAX_VALUE else 0,
                                                             animationMode = MarqueeAnimationMode.Immediately,
                                                         ).focusable(),
                                             )
@@ -592,27 +590,13 @@ fun MiniPlayer(
             }
         }
     } else {
+        val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
+        val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
+        // The Desktop capsule's quality line between its timestamps — see toAudioQualityLabel.
+        val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
         // Desktop bottom bar surface follows the theme (haze over content), so text and controls
         // use the theme foreground token instead of the artwork-luminance colour.
         val textColor = MaterialTheme.colorScheme.onBackground
-
-        // Crossfade cue: a label on the artist line, nothing on the bar itself. The Now Playing
-        // screen cycles the track through hues for this, which on a 2dp hairline reads as a
-        // rendering fault rather than as a transition.
-        // Head of the highlight that travels through the "Crossfading" label, 0..1. Runs
-        // unconditionally: putting it behind the crossfade check would restart the animation from
-        // zero each time the label appears, so the sweep would jump rather than continue.
-        val sweepTransition = rememberInfiniteTransition(label = "miniPlayerCrossfadeSweep")
-        val crossfadeSweep by sweepTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(3200, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-            label = "miniPlayerSweepHead",
-        )
         val progressColor = textColor
 
         var isSliding by rememberSaveable {
@@ -850,6 +834,17 @@ fun MiniPlayer(
                                     enter = fadeIn(),
                                     exit = fadeOut(),
                                 ) {
+                                    val sweepTransition = rememberInfiniteTransition(label = "miniPlayerCrossfadeSweep")
+                                    val crossfadeSweep by sweepTransition.animateFloat(
+                                        initialValue = 0f,
+                                        targetValue = 1f,
+                                        animationSpec =
+                                            infiniteRepeatable(
+                                                animation = tween(3200, easing = LinearEasing),
+                                                repeatMode = RepeatMode.Restart,
+                                            ),
+                                        label = "miniPlayerSweepHead",
+                                    )
                                     // The label is what travels: a highlight sweeping left to
                                     // right through the glyphs. TextStyle takes a brush directly,
                                     // so the gradient paints the text itself — no overlay, no

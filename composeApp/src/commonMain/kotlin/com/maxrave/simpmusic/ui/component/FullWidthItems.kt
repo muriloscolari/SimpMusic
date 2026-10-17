@@ -341,15 +341,15 @@ fun SongFullWidthItems(
                                 .fillMaxWidth()
                                 .wrapContentHeight(align = Alignment.CenterVertically)
                                 .then(
-                                    if (isPlaying) {
+                                    if (isPlaying && !LocalNowPlayingOpen.current) {
                                         Modifier.basicMarquee(
                                             iterations = Int.MAX_VALUE,
                                             animationMode = MarqueeAnimationMode.Immediately,
                                         )
                                     } else {
                                         Modifier
-                                    }
-                                ),
+                                    },
+                                ).focusable(),
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AnimatedVisibility(

@@ -139,6 +139,7 @@ import com.maxrave.domain.utils.toListName
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.expect.copyToClipboard
 import com.maxrave.simpmusic.expect.shareUrl
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
 import com.maxrave.simpmusic.expect.ui.persistPickedImage
 import com.maxrave.simpmusic.expect.ui.photoPickerResult
 import com.maxrave.simpmusic.extension.displayNameRes
@@ -343,6 +344,7 @@ fun InfoPlayerBottomSheet(
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         shape = RectangleShape,
     ) {
+        ForceHighRefreshRate()
         // This dialog MUST stay inside the sheet's content lambda. A Dialog is its own window
         // (Android ComponentDialog) / scene layer (skiko), so nothing in the layout tree orders
         // it — the layer attached LAST wins, and DisposableEffects attach in composition order.
@@ -1057,6 +1059,7 @@ fun QueueBottomSheet(
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         shape = RectangleShape,
     ) {
+        ForceHighRefreshRate()
         Card(
             modifier =
                 Modifier
@@ -1604,6 +1607,7 @@ fun NowPlayingBottomSheet(
             scrimColor = Color.Black.copy(alpha = .5f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
+            ForceHighRefreshRate()
             Card(
                 modifier =
                     Modifier
@@ -1642,9 +1646,11 @@ fun NowPlayingBottomSheet(
                                 ImageRequest
                                     .Builder(LocalPlatformContext.current)
                                     .data(thumb)
+                                    .memoryCachePolicy(CachePolicy.ENABLED)
+                                    .memoryCacheKey(thumb)
                                     .diskCachePolicy(CachePolicy.ENABLED)
                                     .diskCacheKey(thumb)
-                                    .crossfade(550)
+                                    .crossfade(false)
                                     .build(),
                             placeholder = rememberHolderPainter(),
                             error = rememberHolderPainter(),
@@ -1669,8 +1675,10 @@ fun NowPlayingBottomSheet(
                                 modifier =
                                     Modifier
                                         .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
+                                        .basicMarquee(
+                                            animationMode = MarqueeAnimationMode.Immediately,
+                                            initialDelayMillis = 400,
+                                        ).focusable(),
                             )
                             Text(
                                 text =
@@ -1683,8 +1691,10 @@ fun NowPlayingBottomSheet(
                                 modifier =
                                     Modifier
                                         .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
+                                        .basicMarquee(
+                                            animationMode = MarqueeAnimationMode.Immediately,
+                                            initialDelayMillis = 400,
+                                        ).focusable(),
                             )
                         }
                     }
@@ -2124,6 +2134,7 @@ fun PlaybackSpeedPitchBottomSheet(
         scrimColor = Color.Black.copy(alpha = .5f),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        ForceHighRefreshRate()
         Card(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
@@ -2299,6 +2310,7 @@ fun SleepTimerBottomSheet(
         scrimColor = Color.Black.copy(alpha = .5f),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        ForceHighRefreshRate()
         Card(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -2573,6 +2585,7 @@ fun AddToPlaylistModalBottomSheet(
             scrimColor = Color.Black.copy(alpha = .5f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
+            ForceHighRefreshRate()
             Card(
                 modifier =
                     Modifier
@@ -3448,6 +3461,7 @@ fun DevCookieLogInBottomSheet(
 
 @Composable
 fun EndOfModalBottomSheet() {
+    ForceHighRefreshRate()
     Box(
         modifier =
             Modifier

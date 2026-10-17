@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.simpmusic.expect.ui.DeviceVolumeController
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
 import com.maxrave.simpmusic.expect.ui.isLyricsBlurSupported
 import com.maxrave.simpmusic.ui.component.AppleMusicLyricPaddingX
 import com.maxrave.simpmusic.ui.component.LyricsOffsetFloatingControl
@@ -98,6 +99,7 @@ internal fun AppleMusicLyricsView(
     modifier: Modifier = Modifier,
     dataStoreManager: DataStoreManager = koinInject(),
 ) {
+    ForceHighRefreshRate()
     val localDensity = LocalDensity.current
     val lyricsData = state.screenData.lyricsData
 

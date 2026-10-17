@@ -54,14 +54,15 @@ fun InfiniteBorderAnimationView(
     oneCircleDurationMillis: Int = 3000,
     content: @Composable () -> Unit,
 ) {
-    val visibility = updateTransition(isAnimated, label = "Border visibility")
+    val isNowPlayingOpen = LocalNowPlayingOpen.current
+    val visibility = updateTransition(isAnimated && !isNowPlayingOpen, label = "Border visibility")
     val borderScale = visibility.animateFloat(
         transitionSpec = { tween(800) },
         label = "Border scale",
     ) { visible -> if (visible) 1f else 0f }
     // Keep the exit animation, then remove both the frame loop and its offscreen layer.
     val animatedBorder =
-        if (visibility.currentState || visibility.targetState) {
+        if ((visibility.currentState || visibility.targetState) && !isNowPlayingOpen) {
             val infiniteTransition = rememberInfiniteTransition(label = "Infinite Color Animation")
             val degrees = infiniteTransition.animateFloat(
                 initialValue = 90f,
@@ -131,8 +132,9 @@ fun LimitedBorderAnimationView(
     var shouldAnimate by rememberSaveable {
         mutableStateOf(false)
     }
+    val isNowPlayingOpen = LocalNowPlayingOpen.current
     val scaleAnimationValue by animateFloatAsState(
-        if (shouldAnimate) 1f else 0f,
+        if (shouldAnimate && !isNowPlayingOpen) 1f else 0f,
         tween(800),
     )
 
@@ -144,17 +146,23 @@ fun LimitedBorderAnimationView(
         }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "Infinite Color Animation")
-    val degrees by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = oneCircleDurationMillis, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "Infinite Colors",
-    )
+    val degrees =
+        if (isAnimated && scaleAnimationValue > 0f && !isNowPlayingOpen) {
+            val infiniteTransition = rememberInfiniteTransition(label = "Infinite Color Animation")
+            val animDegrees by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = oneCircleDurationMillis, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "Infinite Colors",
+            )
+            animDegrees
+        } else {
+            0f
+        }
     Surface(
         modifier =
             Modifier
@@ -164,7 +172,7 @@ fun LimitedBorderAnimationView(
                 .graphicsLayer {
                     compositingStrategy = CompositingStrategy.Offscreen
                 }.drawBehind {
-                    if (isAnimated) {
+                    if (isAnimated && scaleAnimationValue > 0f) {
                         scale(
                             scale = scaleAnimationValue,
                         ) {

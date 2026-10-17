@@ -62,17 +62,24 @@ fun AudioPlayingIndicator(
     modifier: Modifier = Modifier,
     color: Color = AudioIndicatorCyan,
 ) {
-    val transition = rememberInfiniteTransition(label = "audioPlaying")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = AUDIO_CYCLE_MS, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "phase",
-    )
+    val isNowPlayingOpen = LocalNowPlayingOpen.current
+    val phase =
+        if (!isNowPlayingOpen) {
+            val transition = rememberInfiniteTransition(label = "audioPlaying")
+            val animatedPhase by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = AUDIO_CYCLE_MS, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "phase",
+            )
+            animatedPhase
+        } else {
+            0f
+        }
 
     Canvas(modifier = modifier) {
         val scale = minOf(size.width / AUDIO_COMP_WIDTH, size.height / AUDIO_COMP_HEIGHT)

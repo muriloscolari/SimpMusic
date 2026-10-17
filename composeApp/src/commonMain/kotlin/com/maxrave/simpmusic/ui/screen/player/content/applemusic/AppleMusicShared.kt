@@ -343,12 +343,33 @@ internal fun AppleMusicHeaderActions(
     actions: NowPlayingContentActions,
     modifier: Modifier = Modifier,
 ) {
+    AppleMusicHeaderActions(
+        isUserLoggedIn = state.isUserLoggedIn,
+        likeStatus = state.likeStatus,
+        isLiked = state.controllerState.isLiked,
+        onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
+        onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
+        onShowMoreSheet = actions.onShowMoreSheet,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun AppleMusicHeaderActions(
+    isUserLoggedIn: Boolean,
+    likeStatus: Boolean,
+    isLiked: Boolean,
+    onAddToYouTubeLiked: () -> Unit,
+    onToggleLike: () -> Unit,
+    onShowMoreSheet: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.isUserLoggedIn) {
+        if (isUserLoggedIn) {
             // 40dp target around a 22dp glyph: a bare 22dp clickable is under half the Material
             // minimum, on the row that gets tapped most.
             Box(
@@ -357,10 +378,10 @@ internal fun AppleMusicHeaderActions(
                         .appleMusicPressInflate()
                         .size(24.dp)
                         .clip(CircleShape)
-                        .clickable { actions.onAddToYouTubeLiked() },
+                        .clickable { onAddToYouTubeLiked() },
                 contentAlignment = Alignment.Center,
             ) {
-                Crossfade(targetState = state.likeStatus, label = "appleMusicYtLiked") { liked ->
+                Crossfade(targetState = likeStatus, label = "appleMusicYtLiked") { liked ->
                     Icon(
                         imageVector = if (liked) SimpIcons.CheckCircle else SimpIcons.AddCircleOutline,
                         contentDescription = "",
@@ -378,12 +399,12 @@ internal fun AppleMusicHeaderActions(
                     .heartBurst(likeBurst)
                     .clip(CircleShape)
                     .clickable {
-                        if (!state.controllerState.isLiked) likeBurst.fire()
-                        actions.onUIEvent(UIEvent.ToggleLike)
+                        if (!isLiked) likeBurst.fire()
+                        onToggleLike()
                     },
             contentAlignment = Alignment.Center,
         ) {
-            Crossfade(targetState = state.controllerState.isLiked, label = "appleMusicFavorite") { liked ->
+            Crossfade(targetState = isLiked, label = "appleMusicFavorite") { liked ->
                 Icon(
                     imageVector = if (liked) SimpIcons.Star else SimpIcons.StarBorder,
                     contentDescription = "",
@@ -392,7 +413,7 @@ internal fun AppleMusicHeaderActions(
                 )
             }
         }
-        AppleMusicGlyphButton(icon = SimpIcons.MoreVert, onClick = { actions.onShowMoreSheet() })
+        AppleMusicGlyphButton(icon = SimpIcons.MoreVert, onClick = onShowMoreSheet)
     }
 }
 
@@ -579,20 +600,6 @@ internal fun AppleMusicTimesRow(
         // row and shoving the transport below it. Holding both keeps the height fixed. The
         // cross-fade looks identical — alpha is what fadeIn/fadeOut animated anyway.
         Box(contentAlignment = Alignment.Center) {
-            // Sweep head for the "Crossfading" shimmer, 0..1. Runs UNCONDITIONALLY — put behind the
-            // crossfade check it would restart from zero every time the label appears, which is the
-            // same reason the other two styles declare it outside their own visibility gate.
-            val sweepTransition = rememberInfiniteTransition(label = "appleMusicCrossfadeSweep")
-            val crossfadeSweep by sweepTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec =
-                    infiniteRepeatable(
-                        animation = tween(3200, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                label = "appleMusicSweepHead",
-            )
             val quality = state.audioQualityLabel
             val crossfadeLabelAlpha by animateFloatAsState(
                 targetValue = if (state.timelineState.isCrossfading) 1f else 0f,
@@ -602,30 +609,43 @@ internal fun AppleMusicTimesRow(
                 targetValue = if (!state.timelineState.isCrossfading && quality != null) 1f else 0f,
                 label = "appleMusicQualityLabelAlpha",
             )
-            Box(modifier = Modifier.alpha(crossfadeLabelAlpha)) {
-                // Identical treatment to Classic and M3 Expressive: a highlight swept through the
-                // glyphs with a text brush — no overlay, no clipping.
-                val shimmerSpan = 140f
-                val shimmerHead = crossfadeSweep * (shimmerSpan * 3f) - shimmerSpan
-                val labelColor = typography.times.color
-                Text(
-                    text = stringResource(Res.string.crossfading),
-                    style =
-                        typography.times.copy(
-                            brush =
-                                Brush.horizontalGradient(
-                                    0f to labelColor.copy(alpha = 0.45f),
-                                    // The sweep head is PURE white, not the resting label colour — that
-                                    // colour is an adaptive grey, and a grey gleam reads as no gleam.
-                                    0.5f to Color.White,
-                                    1f to labelColor.copy(alpha = 0.45f),
-                                    startX = shimmerHead,
-                                    endX = shimmerHead + shimmerSpan,
-                                    tileMode = TileMode.Clamp,
-                                ),
+            if (crossfadeLabelAlpha > 0f) {
+                val sweepTransition = rememberInfiniteTransition(label = "appleMusicCrossfadeSweep")
+                val crossfadeSweep by sweepTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(3200, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart,
                         ),
-                    textAlign = TextAlign.Center,
+                    label = "appleMusicSweepHead",
                 )
+                Box(modifier = Modifier.graphicsLayer { alpha = crossfadeLabelAlpha }) {
+                    // Identical treatment to Classic and M3 Expressive: a highlight swept through the
+                    // glyphs with a text brush — no overlay, no clipping.
+                    val shimmerSpan = 140f
+                    val shimmerHead = crossfadeSweep * (shimmerSpan * 3f) - shimmerSpan
+                    val labelColor = typography.times.color
+                    Text(
+                        text = stringResource(Res.string.crossfading),
+                        style =
+                            typography.times.copy(
+                                brush =
+                                    Brush.horizontalGradient(
+                                        0f to labelColor.copy(alpha = 0.45f),
+                                        // The sweep head is PURE white, not the resting label colour — that
+                                        // colour is an adaptive grey, and a grey gleam reads as no gleam.
+                                        0.5f to Color.White,
+                                        1f to labelColor.copy(alpha = 0.45f),
+                                        startX = shimmerHead,
+                                        endX = shimmerHead + shimmerSpan,
+                                        tileMode = TileMode.Clamp,
+                                    ),
+                            ),
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
             // The quality line: a small headphones glyph ahead of the stream's own figures,
             // bare on the page and dimmer than the times either side of it. The figures change
@@ -634,7 +654,7 @@ internal fun AppleMusicTimesRow(
                 targetState = quality,
                 animationSpec = tween(300),
                 label = "appleMusicQualityLabel",
-                modifier = Modifier.alpha(qualityLabelAlpha),
+                modifier = Modifier.graphicsLayer { alpha = qualityLabelAlpha },
             ) { label ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(

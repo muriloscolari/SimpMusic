@@ -66,6 +66,7 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.Platform
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
 import com.maxrave.simpmusic.expect.ui.rememberVideoAspectRatio
 import com.maxrave.simpmusic.extension.GradientAngle
 import com.maxrave.simpmusic.extension.GradientOffset
@@ -157,6 +158,7 @@ fun NowPlayingScreen(
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         shape = RectangleShape,
     ) {
+        ForceHighRefreshRate()
         NowPlayingScreenContent(
             sharedViewModel = sharedViewModel,
             navController = navController,
@@ -179,6 +181,7 @@ fun NowPlayingScreenContent(
     dismissIcon: ImageVector,
     onDismiss: () -> Unit = {},
 ) {
+    ForceHighRefreshRate()
     val coroutineScope = rememberCoroutineScope()
 
     // ViewModel State
@@ -486,20 +489,25 @@ fun NowPlayingScreenContent(
     }
 
     // Crossfade: RGB rainbow color cycling when transitioning between tracks
-    val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
-    val rainbowHue by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(1000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "rainbowHue",
-    )
-    val rainbowColor = hsvToColor(rainbowHue, 1f, 1f)
+    val rainbowColor =
+        if (timelineState.isCrossfading) {
+            val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
+            val rainbowHue by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(1000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "rainbowHue",
+            )
+            hsvToColor(rainbowHue, 1f, 1f)
+        } else {
+            Color.White
+        }
     val sliderTrackColor by animateColorAsState(
-        targetValue = if (timelineState.isCrossfading) rainbowColor else Color.White,
+        targetValue = rainbowColor,
         animationSpec = tween(300),
         label = "sliderCrossfadeColor",
     )
@@ -642,69 +650,72 @@ fun NowPlayingScreenContent(
             lyricsOffsetMs = lyricsOffsetMs.toLong(),
             videoAspectRatio = rememberVideoAspectRatio(MAIN_PLAYER) ?: 16f / 9,
         )
+    val latestScreenDataState by rememberUpdatedState(screenDataState)
     val actions =
-        NowPlayingContentActions(
-            onUIEvent = { sharedViewModel.onUIEvent(it) },
-            onSeekToQueueIndex = { index ->
-                mediaPlayerHandler.playMediaItemInMediaSource(index)
-            },
-            onArtworkBitmap = { sharedViewModel.setBitmap(it) },
-            onSliderChange = { newValue ->
-                isSliding = true
-                sliderValue = newValue
-            },
-            onSliderChangeFinished = {
-                isSliding = false
-                sharedViewModel.onUIEvent(
-                    UIEvent.UpdateProgress(sliderValue),
-                )
-            },
-            onToggleControls = {
-                showHideJob = true
-                showHideControlLayout = !showHideControlLayout
-            },
-            onNavigateToArtist = {
-                val song = sharedViewModel.nowPlayingState.value?.songEntity
-                (
-                    song?.artistId?.firstOrNull()?.takeIf { it.isNotEmpty() }
-                        ?: screenDataState.songInfoData?.authorId
-                )?.let { channelId ->
-                    onDismiss()
-                    navController.navigate(
-                        ArtistDestination(
-                            channelId = channelId,
-                        ),
+        remember(sharedViewModel, mediaPlayerHandler, navController, onDismiss) {
+            NowPlayingContentActions(
+                onUIEvent = { sharedViewModel.onUIEvent(it) },
+                onSeekToQueueIndex = { index ->
+                    mediaPlayerHandler.playMediaItemInMediaSource(index)
+                },
+                onArtworkBitmap = { sharedViewModel.setBitmap(it) },
+                onSliderChange = { newValue ->
+                    isSliding = true
+                    sliderValue = newValue
+                },
+                onSliderChangeFinished = {
+                    isSliding = false
+                    sharedViewModel.onUIEvent(
+                        UIEvent.UpdateProgress(sliderValue),
                     )
-                }
-            },
-            onOpenListenTogether = {
-                onDismiss()
-                navController.navigate(ListenTogetherDestination)
-            },
-            onAddToYouTubeLiked = { sharedViewModel.addToYouTubeLiked() },
-            onShowMoreSheet = { showSheet = true },
-            onShowQueue = { showQueueBottomSheet = true },
-            onShowInfo = { showInfoBottomSheet = true },
-            onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
-            onShowFullscreenLyrics = { showFullscreenLyrics = true },
-            onShowVoteDialog = { showVoteDialog = true },
-            onLyricsOffsetChange = { sharedViewModel.setLyricsOffsetMs(it) },
-            onEnterFullscreenVideo = {
-                onDismiss()
-                navController.navigate(FullscreenDestination)
-            },
-            onDismiss = onDismiss,
-            onToolbarVisibilityChange = { shouldShowToolbar = it },
-            onMoveQueueItem = { from, to ->
-                coroutineScope.launch {
-                    mediaPlayerHandler.swap(from, to)
-                }
-            },
-            onRemoveQueueItem = { index ->
-                mediaPlayerHandler.removeMediaItem(index)
-            },
-            onQueueItemMore = { index, track -> queueMoreFor = index to track },
-        )
+                },
+                onToggleControls = {
+                    showHideJob = true
+                    showHideControlLayout = !showHideControlLayout
+                },
+                onNavigateToArtist = {
+                    val song = sharedViewModel.nowPlayingState.value?.songEntity
+                    (
+                        song?.artistId?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                            ?: latestScreenDataState.songInfoData?.authorId
+                    )?.let { channelId ->
+                        onDismiss()
+                        navController.navigate(
+                            ArtistDestination(
+                                channelId = channelId,
+                            ),
+                        )
+                    }
+                },
+                onOpenListenTogether = {
+                    onDismiss()
+                    navController.navigate(ListenTogetherDestination)
+                },
+                onAddToYouTubeLiked = { sharedViewModel.addToYouTubeLiked() },
+                onShowMoreSheet = { showSheet = true },
+                onShowQueue = { showQueueBottomSheet = true },
+                onShowInfo = { showInfoBottomSheet = true },
+                onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
+                onShowFullscreenLyrics = { showFullscreenLyrics = true },
+                onShowVoteDialog = { showVoteDialog = true },
+                onLyricsOffsetChange = { sharedViewModel.setLyricsOffsetMs(it) },
+                onEnterFullscreenVideo = {
+                    onDismiss()
+                    navController.navigate(FullscreenDestination)
+                },
+                onDismiss = onDismiss,
+                onToolbarVisibilityChange = { shouldShowToolbar = it },
+                onMoveQueueItem = { from, to ->
+                    coroutineScope.launch {
+                        mediaPlayerHandler.swap(from, to)
+                    }
+                },
+                onRemoveQueueItem = { index ->
+                    mediaPlayerHandler.removeMediaItem(index)
+                },
+                onQueueItemMore = { index, track -> queueMoreFor = index to track },
+            )
+        }
 
     // Below `state`/`actions`: the landscape lyrics layout renders the current style's own track row
     // and playback controls, so it takes the same contract the style content does.
