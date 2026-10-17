@@ -5,7 +5,7 @@ import com.maxrave.common.LibraryChipType
 
 // Every path the deep-link router in App.kt opens; anything else gets its "link not supported" toast.
 // A path added there must be added here too, or no launch banner can point at it.
-private val APP_LINK_PATHS = setOf("notification", "watch", "playlist", "channel", "c", "album", "library", "analytics", "taste")
+private val APP_LINK_PATHS = setOf("notification", "watch", "playlist", "channel", "c", "album", "library", "analytics", "taste", "player")
 
 /**
  * Whether the screen a `simpmusic://` link opens exists for this user right now. Analytics, the
