@@ -7,14 +7,6 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.view.View
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -54,8 +46,14 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import coil3.SingletonImageLoader
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
+import com.kmpalette.generatePalette
 import com.kmpalette.palette.graphics.Palette
-import com.kmpalette.rememberPaletteState
 import com.maxrave.common.Config
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
@@ -63,17 +61,24 @@ import com.maxrave.domain.mediaservice.handler.PlayerEvent
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.qualifier.named
+import java.util.concurrent.atomic.AtomicBoolean
 
-private const val COMPACT_PLAYER_DECODE_PX = 512
+private const val COMPACT_PLAYER_DECODE_PX = 192
 private val DEFAULT_COMPACT_WIDGET_BG = Color(0xFF1C1B1F)
 
 class CompactPlayPauseAction :
@@ -86,11 +91,13 @@ class CompactPlayPauseAction :
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
+        CompactPlayerWidgetObserver.ensureObserving(context)
         if (mediaPlayerHandler.nowPlayingState.value.mediaItem == GenericMediaItem.EMPTY) {
             mediaPlayerHandler.restoreQueueAndPlay()
         } else {
             mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause)
         }
+        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
     }
 }
 
@@ -104,7 +111,9 @@ class CompactPreviousAction :
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
+        CompactPlayerWidgetObserver.ensureObserving(context)
         mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
+        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
     }
 }
 
@@ -118,7 +127,9 @@ class CompactNextAction :
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
+        CompactPlayerWidgetObserver.ensureObserving(context)
         mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
+        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
     }
 }
 
@@ -126,7 +137,10 @@ object CompactPlayerWidgetObserver : KoinComponent {
     private val mediaPlayerHandler by inject<MediaPlayerHandler>()
     private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
     private var observerJob: Job? = null
+    private val updateMutex = Mutex()
+    private val pendingUpdate = AtomicBoolean(false)
 
+    @OptIn(FlowPreview::class)
     fun ensureObserving(context: Context) {
         if (observerJob?.isActive == true) return
         val appContext = context.applicationContext
@@ -134,59 +148,75 @@ object CompactPlayerWidgetObserver : KoinComponent {
             if (observerJob?.isActive == true) return
             observerJob =
                 serviceScope.launch {
-                    var isFirstControl = true
-                    launch {
-                        mediaPlayerHandler.controlState
-                            .map { it.isPlaying }
-                            .distinctUntilChanged()
-                            .collectLatest {
-                                if (isFirstControl) {
-                                    isFirstControl = false
-                                    return@collectLatest
-                                }
-                                updateWidgetsIfPresent(appContext)
-                            }
-                    }
+                    try {
+                        val isPlayingFlow =
+                            mediaPlayerHandler.controlState
+                                .map { it.isPlaying }
+                                .distinctUntilChanged()
 
-                    var isFirstTrack = true
-                    launch {
-                        mediaPlayerHandler.nowPlayingState
-                            .map { state ->
-                                val mediaId = state.mediaItem.mediaId
-                                val title =
-                                    state.songEntity?.title
-                                        ?: state.track?.title
-                                        ?: state.mediaItem.metadata.title
-                                        ?: ""
-                                val artworkUri =
-                                    state.mediaItem.metadata.artworkUri
-                                        ?: state.songEntity?.thumbnails
-                                        ?: state.track?.thumbnails?.lastOrNull()?.url
-                                        ?: ""
-                                Triple(mediaId, title, artworkUri)
-                            }
-                            .distinctUntilChanged()
-                            .collectLatest {
-                                if (isFirstTrack) {
-                                    isFirstTrack = false
-                                    return@collectLatest
+                        val trackInfoFlow =
+                            mediaPlayerHandler.nowPlayingState
+                                .map { state ->
+                                    val mediaId = state.mediaItem.mediaId
+                                    val title =
+                                        state.songEntity?.title
+                                            ?: state.track?.title
+                                            ?: state.mediaItem.metadata.title
+                                            ?: ""
+                                    val artworkUri =
+                                        state.mediaItem.metadata.artworkUri
+                                            ?: state.songEntity?.thumbnails
+                                            ?: state.track?.thumbnails?.lastOrNull()?.url
+                                            ?: ""
+                                    Triple(mediaId, title, artworkUri)
                                 }
+                                .distinctUntilChanged()
+
+                        combine(isPlayingFlow, trackInfoFlow) { isPlaying, trackInfo ->
+                            Pair(isPlaying, trackInfo)
+                        }
+                            .distinctUntilChanged()
+                            .drop(1)
+                            .debounce(150)
+                            .collect {
                                 updateWidgetsIfPresent(appContext)
                             }
+                    } catch (t: Throwable) {
+                        if (t !is CancellationException) {
+                            Logger.e("CompactPlayerWidget", "Observer error: ${t.message}")
+                        }
                     }
                 }
         }
     }
 
     suspend fun updateWidgetsIfPresent(context: Context) {
+        val appContext = context.applicationContext
+        pendingUpdate.set(true)
+        if (!updateMutex.tryLock()) {
+            return
+        }
         try {
-            val manager = GlanceAppWidgetManager(context)
-            val glanceIds = manager.getGlanceIds(CompactPlayerWidget::class.java)
-            if (glanceIds.isNotEmpty()) {
-                CompactPlayerWidget().updateAll(context)
+            while (true) {
+                if (!pendingUpdate.getAndSet(false)) {
+                    break
+                }
+                try {
+                    val manager = GlanceAppWidgetManager(appContext)
+                    val glanceIds = manager.getGlanceIds(CompactPlayerWidget::class.java)
+                    if (glanceIds.isNotEmpty()) {
+                        CompactPlayerWidget().updateAll(appContext)
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Logger.e("CompactPlayerWidget", "Failed to update compact widget: ${t.message}")
+                }
             }
-        } catch (e: Exception) {
-            Logger.e("CompactPlayerWidget", "Failed to update compact widget: ${e.message}")
+        } finally {
+            updateMutex.unlock()
+            if (pendingUpdate.get()) {
+                serviceScope.launch { updateWidgetsIfPresent(appContext) }
+            }
         }
     }
 }
@@ -215,67 +245,41 @@ class CompactPlayerWidget :
     ) {
         CompactPlayerWidgetObserver.ensureObserving(context)
 
+        val controllerState = mediaPlayerHandler.controlState.value
+        val nowPlayingState = mediaPlayerHandler.nowPlayingState.value
+
+        val title =
+            nowPlayingState.songEntity?.title?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.track?.title?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.mediaItem.metadata.title?.takeIf { it.isNotBlank() }
+                ?: ""
+        val artist =
+            nowPlayingState.songEntity?.artistName?.joinToString(", ")?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.track?.artists?.mapNotNull { it.name.takeIf(String::isNotBlank) }?.joinToString(", ")?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.mediaItem.metadata.artist?.takeIf { it.isNotBlank() }
+                ?: ""
+        val thumbUrl =
+            nowPlayingState.mediaItem.metadata.artworkUri?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.songEntity?.thumbnails?.takeIf { it.isNotBlank() }
+                ?: nowPlayingState.track?.thumbnails?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+
+        val artwork = context.loadCompactWidgetArtwork(thumbUrl)
+        val bgColor =
+            if (artwork != null) {
+                try {
+                    artwork.asImageBitmap().generatePalette().getDominantWidgetColor()
+                } catch (t: Throwable) {
+                    DEFAULT_COMPACT_WIDGET_BG
+                }
+            } else {
+                DEFAULT_COMPACT_WIDGET_BG
+            }
+
+        val isPlayingNow = controllerState.isPlaying && title.isNotBlank()
+        val openIntent = context.openCompactWidgetIntent(isPlaying = isPlayingNow)
+
         provideContent {
             GlanceTheme {
-                val controllerState by mediaPlayerHandler.controlState.collectAsState()
-                val nowPlayingState by mediaPlayerHandler.nowPlayingState.collectAsState()
-
-                val paletteState = rememberPaletteState()
-                var artwork by remember { mutableStateOf<Bitmap?>(null) }
-                var bgColor by remember { mutableStateOf(DEFAULT_COMPACT_WIDGET_BG) }
-
-                val title by remember {
-                    derivedStateOf {
-                        nowPlayingState.songEntity?.title?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.track?.title?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.mediaItem.metadata.title?.takeIf { it.isNotBlank() }
-                            ?: ""
-                    }
-                }
-                val artist by remember {
-                    derivedStateOf {
-                        nowPlayingState.songEntity?.artistName?.joinToString(", ")?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.track?.artists?.mapNotNull { it.name.takeIf(String::isNotBlank) }?.joinToString(", ")?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.mediaItem.metadata.artist?.takeIf { it.isNotBlank() }
-                            ?: ""
-                    }
-                }
-                val thumbUrl by remember {
-                    derivedStateOf {
-                        nowPlayingState.mediaItem.metadata.artworkUri?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.songEntity?.thumbnails?.takeIf { it.isNotBlank() }
-                            ?: nowPlayingState.track?.thumbnails?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
-                    }
-                }
-
-                LaunchedEffect(artwork) {
-                    val bmp = artwork
-                    if (bmp != null) {
-                        paletteState.generate(bmp.asImageBitmap())
-                    } else {
-                        bgColor = DEFAULT_COMPACT_WIDGET_BG
-                    }
-                }
-
-                LaunchedEffect(Unit) {
-                    snapshotFlow { paletteState.palette }
-                        .distinctUntilChanged()
-                        .collectLatest { palette ->
-                            bgColor =
-                                if (artwork != null) {
-                                    palette.getDominantWidgetColor()
-                                } else {
-                                    DEFAULT_COMPACT_WIDGET_BG
-                                }
-                        }
-                }
-
-                LaunchedEffect(thumbUrl) {
-                    artwork = context.loadBitmap(thumbUrl, (thumbUrl ?: "") + "BIGGER", COMPACT_PLAYER_DECODE_PX)
-                }
-
-                val isPlayingNow = controllerState.isPlaying && title.isNotBlank()
-                val openIntent = context.openCompactWidgetIntent(isPlaying = isPlayingNow)
                 val widgetHeight = LocalSize.current.height
                 val artSize = (widgetHeight - 6.dp).coerceIn(44.dp, 64.dp)
 
@@ -459,3 +463,25 @@ private fun Palette?.getDominantWidgetColor(): Color {
         else -> base.copy(alpha = 1f)
     }
 }
+
+private suspend fun Context.loadCompactWidgetArtwork(url: String?): Bitmap? {
+    if (url.isNullOrBlank()) return null
+    return withTimeoutOrNull(2000L) {
+        try {
+            val request =
+                ImageRequest
+                    .Builder(applicationContext)
+                    .data(url)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .allowHardware(false)
+                    .size(COMPACT_PLAYER_DECODE_PX, COMPACT_PLAYER_DECODE_PX)
+                    .build()
+            val result = SingletonImageLoader.get(applicationContext).execute(request)
+            (result as? SuccessResult)?.image?.toBitmap()
+        } catch (t: Throwable) {
+            null
+        }
+    }
+}
+
