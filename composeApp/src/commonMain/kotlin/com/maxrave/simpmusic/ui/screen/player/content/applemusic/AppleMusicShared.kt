@@ -343,12 +343,33 @@ internal fun AppleMusicHeaderActions(
     actions: NowPlayingContentActions,
     modifier: Modifier = Modifier,
 ) {
+    AppleMusicHeaderActions(
+        isUserLoggedIn = state.isUserLoggedIn,
+        likeStatus = state.likeStatus,
+        isLiked = state.controllerState.isLiked,
+        onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
+        onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
+        onShowMoreSheet = actions.onShowMoreSheet,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun AppleMusicHeaderActions(
+    isUserLoggedIn: Boolean,
+    likeStatus: Boolean,
+    isLiked: Boolean,
+    onAddToYouTubeLiked: () -> Unit,
+    onToggleLike: () -> Unit,
+    onShowMoreSheet: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.isUserLoggedIn) {
+        if (isUserLoggedIn) {
             // 40dp target around a 22dp glyph: a bare 22dp clickable is under half the Material
             // minimum, on the row that gets tapped most.
             Box(
@@ -357,10 +378,10 @@ internal fun AppleMusicHeaderActions(
                         .appleMusicPressInflate()
                         .size(24.dp)
                         .clip(CircleShape)
-                        .clickable { actions.onAddToYouTubeLiked() },
+                        .clickable { onAddToYouTubeLiked() },
                 contentAlignment = Alignment.Center,
             ) {
-                Crossfade(targetState = state.likeStatus, label = "appleMusicYtLiked") { liked ->
+                Crossfade(targetState = likeStatus, label = "appleMusicYtLiked") { liked ->
                     Icon(
                         imageVector = if (liked) SimpIcons.CheckCircle else SimpIcons.AddCircleOutline,
                         contentDescription = "",
@@ -378,12 +399,12 @@ internal fun AppleMusicHeaderActions(
                     .heartBurst(likeBurst)
                     .clip(CircleShape)
                     .clickable {
-                        if (!state.controllerState.isLiked) likeBurst.fire()
-                        actions.onUIEvent(UIEvent.ToggleLike)
+                        if (!isLiked) likeBurst.fire()
+                        onToggleLike()
                     },
             contentAlignment = Alignment.Center,
         ) {
-            Crossfade(targetState = state.controllerState.isLiked, label = "appleMusicFavorite") { liked ->
+            Crossfade(targetState = isLiked, label = "appleMusicFavorite") { liked ->
                 Icon(
                     imageVector = if (liked) SimpIcons.Star else SimpIcons.StarBorder,
                     contentDescription = "",
@@ -392,7 +413,7 @@ internal fun AppleMusicHeaderActions(
                 )
             }
         }
-        AppleMusicGlyphButton(icon = SimpIcons.MoreVert, onClick = { actions.onShowMoreSheet() })
+        AppleMusicGlyphButton(icon = SimpIcons.MoreVert, onClick = onShowMoreSheet)
     }
 }
 

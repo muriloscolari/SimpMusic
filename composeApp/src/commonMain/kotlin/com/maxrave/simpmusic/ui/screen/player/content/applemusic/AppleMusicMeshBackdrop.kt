@@ -155,7 +155,7 @@ private fun DrawScope.drawMesh(
             dstOffset = IntOffset.Zero,
             dstSize = IntSize(width, seam),
             alpha = alpha,
-            filterQuality = FilterQuality.Low,
+            filterQuality = FilterQuality.Medium,
         )
     }
     drawImage(
@@ -165,7 +165,7 @@ private fun DrawScope.drawMesh(
         dstOffset = IntOffset(0, seam),
         dstSize = IntSize(width, (size.height.roundToInt() - seam).coerceAtLeast(1)),
         alpha = alpha,
-        filterQuality = FilterQuality.Low,
+        filterQuality = FilterQuality.Medium,
     )
 }
 
@@ -339,9 +339,9 @@ private const val MESH_FLOOR = 0.045f
 /** How long the page takes to change colour on a skip: long enough to read as a change, not a cut. */
 private const val MESH_FADE_MS = 900
 
-// The owner asked for the page to be visibly smooth, and at 44dp no cell edge survives even on a
-// cover with hard colour blocks.
-private val MESH_BLUR = 44.dp
+// The owner asked for the page to be visibly smooth. Paired with FilterQuality.Medium
+// and smoothstep resampling, 20dp eliminates all cell edges while cutting Gaussian blur passes by >50%.
+private val MESH_BLUR = 20.dp
 
 /** Drawn only until an artwork has been read. */
 private val MeshFallback = Color(0xFF121212)
