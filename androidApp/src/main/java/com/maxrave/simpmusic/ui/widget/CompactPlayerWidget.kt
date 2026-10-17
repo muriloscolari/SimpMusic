@@ -27,13 +27,17 @@ import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -56,12 +60,14 @@ import com.maxrave.common.Config
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.PlayerEvent
+import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -69,6 +75,121 @@ import org.koin.core.qualifier.named
 
 private const val COMPACT_PLAYER_DECODE_PX = 512
 private val DEFAULT_COMPACT_WIDGET_BG = Color(0xFF1C1B1F)
+
+class CompactPlayPauseAction :
+    ActionCallback,
+    KoinComponent {
+    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
+
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        if (mediaPlayerHandler.nowPlayingState.value.mediaItem == GenericMediaItem.EMPTY) {
+            mediaPlayerHandler.restoreQueueAndPlay()
+        } else {
+            mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause)
+        }
+    }
+}
+
+class CompactPreviousAction :
+    ActionCallback,
+    KoinComponent {
+    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
+
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
+    }
+}
+
+class CompactNextAction :
+    ActionCallback,
+    KoinComponent {
+    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
+
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
+    }
+}
+
+object CompactPlayerWidgetObserver : KoinComponent {
+    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
+    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
+    private var observerJob: Job? = null
+
+    fun ensureObserving(context: Context) {
+        if (observerJob?.isActive == true) return
+        val appContext = context.applicationContext
+        synchronized(this) {
+            if (observerJob?.isActive == true) return
+            observerJob =
+                serviceScope.launch {
+                    var isFirstControl = true
+                    launch {
+                        mediaPlayerHandler.controlState
+                            .map { it.isPlaying }
+                            .distinctUntilChanged()
+                            .collectLatest {
+                                if (isFirstControl) {
+                                    isFirstControl = false
+                                    return@collectLatest
+                                }
+                                updateWidgetsIfPresent(appContext)
+                            }
+                    }
+
+                    var isFirstTrack = true
+                    launch {
+                        mediaPlayerHandler.nowPlayingState
+                            .map { state ->
+                                val mediaId = state.mediaItem.mediaId
+                                val title =
+                                    state.songEntity?.title
+                                        ?: state.track?.title
+                                        ?: state.mediaItem.metadata.title
+                                        ?: ""
+                                val artworkUri =
+                                    state.mediaItem.metadata.artworkUri
+                                        ?: state.songEntity?.thumbnails
+                                        ?: state.track?.thumbnails?.lastOrNull()?.url
+                                        ?: ""
+                                Triple(mediaId, title, artworkUri)
+                            }
+                            .distinctUntilChanged()
+                            .collectLatest {
+                                if (isFirstTrack) {
+                                    isFirstTrack = false
+                                    return@collectLatest
+                                }
+                                updateWidgetsIfPresent(appContext)
+                            }
+                    }
+                }
+        }
+    }
+
+    suspend fun updateWidgetsIfPresent(context: Context) {
+        try {
+            val manager = GlanceAppWidgetManager(context)
+            val glanceIds = manager.getGlanceIds(CompactPlayerWidget::class.java)
+            if (glanceIds.isNotEmpty()) {
+                CompactPlayerWidget().updateAll(context)
+            }
+        } catch (e: Exception) {
+            Logger.e("CompactPlayerWidget", "Failed to update compact widget: ${e.message}")
+        }
+    }
+}
 
 /**
  * Compact 1-row playback bar widget inspired by Spotify and YouTube Music:
@@ -86,29 +207,13 @@ class CompactPlayerWidget :
     override val sizeMode: SizeMode = SizeMode.Exact
 
     private val mediaPlayerHandler by inject<MediaPlayerHandler>()
-    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
-    private var observeJob: Job? = null
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        if (observeJob?.isActive != true) {
-            observeJob =
-                serviceScope.launch {
-                    val controllerJob =
-                        launch {
-                            mediaPlayerHandler.controlState.collectLatest { updateWidget(context) }
-                        }
-                    val nowPlayingJob =
-                        launch {
-                            mediaPlayerHandler.nowPlayingState.collectLatest { updateWidget(context) }
-                        }
-                    controllerJob.join()
-                    nowPlayingJob.join()
-                }
-        }
+        CompactPlayerWidgetObserver.ensureObserving(context)
 
         provideContent {
             GlanceTheme {
@@ -142,8 +247,6 @@ class CompactPlayerWidget :
                             ?: nowPlayingState.track?.thumbnails?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
                     }
                 }
-
-                LaunchedEffect(bgColor) { updateWidget(context) }
 
                 LaunchedEffect(artwork) {
                     val bmp = artwork
@@ -218,12 +321,13 @@ class CompactPlayerWidget :
                         }
                     }
 
-                    // Middle: Song title on top, artist on bottom
+                    Spacer(GlanceModifier.width(8.dp))
+
+                    // Middle: Song title (top) and artist (bottom)
                     Column(
                         modifier =
                             GlanceModifier
                                 .defaultWeight()
-                                .padding(start = 10.dp, end = 6.dp)
                                 .clickable(
                                     actionStartActivity(openIntent),
                                     rippleOverride = R.drawable.no_ripple,
@@ -266,11 +370,10 @@ class CompactPlayerWidget :
                                 GlanceModifier
                                     .size(34.dp)
                                     .padding(4.dp)
-                                    .clickable(rippleOverride = R.drawable.no_ripple) {
-                                        serviceScope.launch {
-                                            mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
-                                        }
-                                    },
+                                    .clickable(
+                                        onClick = actionRunCallback<CompactPreviousAction>(),
+                                        rippleOverride = R.drawable.no_ripple,
+                                    ),
                         )
                     }
                     val nextButton: @Composable () -> Unit = {
@@ -282,11 +385,10 @@ class CompactPlayerWidget :
                                 GlanceModifier
                                     .size(34.dp)
                                     .padding(4.dp)
-                                    .clickable(rippleOverride = R.drawable.no_ripple) {
-                                        serviceScope.launch {
-                                            mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
-                                        }
-                                    },
+                                    .clickable(
+                                        onClick = actionRunCallback<CompactNextAction>(),
+                                        rippleOverride = R.drawable.no_ripple,
+                                    ),
                         )
                     }
 
@@ -306,28 +408,16 @@ class CompactPlayerWidget :
                                 GlanceModifier
                                     .size(38.dp)
                                     .padding(4.dp)
-                                    .clickable(rippleOverride = R.drawable.no_ripple) {
-                                        serviceScope.launch {
-                                            if (mediaPlayerHandler.nowPlayingState.value.mediaItem == GenericMediaItem.EMPTY) {
-                                                mediaPlayerHandler.restoreQueueAndPlay()
-                                            } else {
-                                                mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause)
-                                            }
-                                        }
-                                    },
+                                    .clickable(
+                                        onClick = actionRunCallback<CompactPlayPauseAction>(),
+                                        rippleOverride = R.drawable.no_ripple,
+                                    ),
                         )
                         Spacer(GlanceModifier.width(4.dp))
                         if (systemRtl) previousButton() else nextButton()
                     }
                 }
             }
-        }
-    }
-
-    private suspend fun updateWidget(context: Context) {
-        val manager = GlanceAppWidgetManager(context)
-        manager.getGlanceIds(this@CompactPlayerWidget.javaClass).forEach { glanceId ->
-            this@CompactPlayerWidget.update(context, glanceId)
         }
     }
 }

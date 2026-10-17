@@ -40,6 +40,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 import org.simpmusic.crashlytics.configCrashlytics
 import org.simpmusic.lastfm.configLastfm
+import com.maxrave.simpmusic.ui.widget.CompactPlayerWidgetObserver
 import java.io.File
 import java.lang.reflect.Field
 
@@ -71,6 +72,7 @@ class SimpMusicApplication :
             )
             loadKoinModules(viewModelModule)
         }
+        CompactPlayerWidgetObserver.ensureObserving(this)
         // provide custom configuration
         val workConfig =
             Configuration
