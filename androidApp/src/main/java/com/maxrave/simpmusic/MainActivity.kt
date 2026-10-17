@@ -39,6 +39,7 @@ import com.maxrave.media3.di.setServiceActivitySession
 import com.maxrave.simpmusic.di.viewModelModule
 import com.maxrave.simpmusic.service.rss.RssFeedNotifyWork
 import com.maxrave.simpmusic.service.test.notification.NotifyWork
+import com.maxrave.simpmusic.expect.ui.applyHighRefreshRate
 import com.maxrave.simpmusic.utils.ComposeResUtils
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -187,6 +188,7 @@ class MainActivity : AppCompatActivity() {
                     scrim = Color.Transparent.toArgb(),
                 ),
         )
+        applyHighRefreshRate(window)
         viewModel.checkIsRestoring()
         val request =
             PeriodicWorkRequestBuilder<NotifyWork>(
@@ -274,6 +276,18 @@ class MainActivity : AppCompatActivity() {
     override fun onRestart() {
         super.onRestart()
         viewModel.activityRecreate()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        applyHighRefreshRate(window)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyHighRefreshRate(window)
+        }
     }
 
     private fun startMusicService() {

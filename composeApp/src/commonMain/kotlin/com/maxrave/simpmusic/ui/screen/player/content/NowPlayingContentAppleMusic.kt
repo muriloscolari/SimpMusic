@@ -76,6 +76,7 @@ import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.RepeatState
 import com.maxrave.simpmusic.Platform
 import com.maxrave.simpmusic.expect.ui.DeviceVolumeController
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
 import com.maxrave.simpmusic.expect.ui.MediaPlayerView
 import com.maxrave.simpmusic.expect.ui.MediaPlayerViewWithSubtitle
 import com.maxrave.simpmusic.expect.ui.layerBackdrop
@@ -131,6 +132,7 @@ fun NowPlayingContentAppleMusic(
     state: NowPlayingContentState,
     actions: NowPlayingContentActions,
 ) {
+    ForceHighRefreshRate()
     // Seeded from the view model, not from MAIN: this player lives in a ModalBottomSheet, so
     // dismissing it disposes the tree and rememberSaveable dies with it. rememberSaveable is still
     // the right holder WITHIN a session (it survives rotation without a round trip), the view model

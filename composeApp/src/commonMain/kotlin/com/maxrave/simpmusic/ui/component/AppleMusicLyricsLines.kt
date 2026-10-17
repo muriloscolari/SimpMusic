@@ -11,9 +11,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
@@ -200,37 +203,34 @@ fun Modifier.appleMusicLyricFocus(
             else -> (1f - distance * ALPHA_FALLOFF_PER_LINE).coerceAtLeast(MIN_LINE_ALPHA)
         }
 
-    val blurRadius by animateDpAsState(targetValue = targetBlur, animationSpec = tween(400), label = "appleMusicLyricBlur")
-    val lineAlpha by animateFloatAsState(targetValue = targetAlpha, animationSpec = tween(400), label = "appleMusicLyricAlpha")
+    val blurRadiusState = animateDpAsState(targetValue = targetBlur, animationSpec = tween(400), label = "appleMusicLyricBlur")
+    val lineAlphaState = animateFloatAsState(targetValue = targetAlpha, animationSpec = tween(400), label = "appleMusicLyricAlpha")
 
-    // alpha BEFORE blur: blurring an already-faded line keeps the two effects independent, whereas
-    // fading a blurred layer washes the blur out into a flat smear.
-    return this
-        .alpha(lineAlpha)
-        .then(
-            if (blurRadius > 0.dp) {
-                // Unbounded, NOT the default, on Android. blur(radius) alone uses
-                // BlurredEdgeTreatment.Rectangle, which clips the blur to the line's own bounds —
-                // so the softened glyphs get sliced off square at the edges and the line reads as a
-                // smudged block rather than an out-of-focus word. Unbounded lets the blur bleed
-                // past the bounds, which is what makes it look like depth of field.
-                //
-                // Desktop cannot have that. Each line is a LazyColumn item and skiko clips an item
-                // to its own bounds, so the part Unbounded deliberately paints outside gets sliced
-                // off at the item boundary — a hard horizontal tear across the line below the one
-                // being sung. Rectangle keeps every pixel inside the item, which is what that clip
-                // wants. The trade is softer-looking edges, only on lines already out of focus.
-                val edge =
-                    if (getPlatform() == Platform.Desktop) {
-                        BlurredEdgeTreatment.Rectangle
-                    } else {
-                        BlurredEdgeTreatment.Unbounded
-                    }
-                Modifier.blur(blurRadius, edge)
+    val edge =
+        if (getPlatform() == Platform.Desktop) {
+            BlurredEdgeTreatment.Rectangle
+        } else {
+            BlurredEdgeTreatment.Unbounded
+        }
+    val tileMode = if (edge.shape != null) TileMode.Clamp else TileMode.Decal
+    val clip = edge.shape != null
+
+    // Defer state reads (alpha and blur) to the graphicsLayer draw phase to avoid recomposing every
+    // visible line on every frame (up to 120 FPS) of the 400ms transition.
+    return this.graphicsLayer {
+        alpha = lineAlphaState.value
+        val rPx = blurRadiusState.value.toPx()
+        renderEffect =
+            if (rPx > 0f) {
+                BlurEffect(rPx, rPx, tileMode)
             } else {
-                Modifier
-            },
-        )
+                null
+            }
+        if (clip) {
+            shape = edge.shape ?: RectangleShape
+            this.clip = true
+        }
+    }
 }
 
 /**

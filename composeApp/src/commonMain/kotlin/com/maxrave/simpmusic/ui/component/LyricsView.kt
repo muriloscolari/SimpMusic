@@ -46,10 +46,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
+import kotlin.math.roundToLong
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Shadow
@@ -436,6 +440,7 @@ fun LyricsView(
     dataStoreManager: DataStoreManager = koinInject(),
     romanizer: LyricsRomanizerRepository = koinInject(),
 ) {
+    ForceHighRefreshRate()
     val listState = rememberLazyListState()
     // AMLL drops blur to zero while the user is scrolling by hand (resolveBlurLevel:
     // `if (this.scrollState.isTouchScrolled || isFocused) return 0`) — you are reading ahead at
@@ -910,25 +915,48 @@ fun LyricsLineItem(
  * Drift is bounded by [PLAYHEAD_TICK_MS]: while the ticks keep coming this never runs more than one
  * tick ahead, and when they stop — paused playback — it settles one tick ahead and stays there.
  */
+private const val PLAYHEAD_CATCH_UP_MS = 120.0
+private const val PLAYHEAD_SNAP_MS = 250.0
+private const val PLAYHEAD_MAX_EXTRAPOLATION_MS = 250.0
+
+/**
+ * Continuous frame-clock playhead for smooth 120 FPS lyric playback.
+ * Rather than restarting on every 50ms tick (which causes micro-stutters and clamping jitter),
+ * this keeps time on the vsync frame clock and smoothly leans toward player position reports.
+ */
 @Composable
 private fun rememberSmoothPlayhead(
     rawMs: Long,
     enabled: Boolean,
 ): State<Long> {
     val playhead = remember { mutableLongStateOf(rawMs) }
-    LaunchedEffect(rawMs, enabled) {
+    val latestRaw by rememberUpdatedState(rawMs)
+    LaunchedEffect(enabled) {
         if (!enabled) {
-            playhead.longValue = rawMs
+            snapshotFlow { latestRaw }.collect { playhead.longValue = it }
             return@LaunchedEffect
         }
-        // Keyed on rawMs, so the next real tick cancels this loop and restarts it from the truth —
-        // the interpolation can accumulate error for at most one tick before being corrected.
-        var baseNanos = -1L
+        var reported = latestRaw
+        var reportedAt = -1L
+        var lastFrame = -1L
+        var position = playhead.longValue.toDouble()
         while (true) {
-            withFrameNanos { frameNanos ->
-                if (baseNanos < 0L) baseNanos = frameNanos
-                val elapsedMs = (frameNanos - baseNanos) / 1_000_000L
-                playhead.longValue = rawMs + elapsedMs.coerceIn(0L, PLAYHEAD_TICK_MS)
+            withFrameNanos { now ->
+                if (reportedAt < 0L || latestRaw != reported) {
+                    reported = latestRaw
+                    reportedAt = now
+                }
+                val target = reported + ((now - reportedAt) / 1_000_000.0).coerceAtMost(PLAYHEAD_MAX_EXTRAPOLATION_MS)
+                val step = if (lastFrame < 0L) 0.0 else (now - lastFrame) / 1_000_000.0
+                lastFrame = now
+                position =
+                    if (abs(target - position) > PLAYHEAD_SNAP_MS) {
+                        target
+                    } else {
+                        val advanced = position + step
+                        max(position, advanced + (target - advanced) * (step / PLAYHEAD_CATCH_UP_MS).coerceAtMost(1.0))
+                    }
+                playhead.longValue = position.roundToLong()
             }
         }
     }
@@ -1268,7 +1296,7 @@ private fun AnimatedWord(
                         // character has finished rising, which is exactly what makes the line ripple
                         // instead of stepping. Its own animation, on its own clock, so a word sung faster
                         // than the rise still completes.
-                        val charRise by animateFloatAsState(
+                        val charRiseState = animateFloatAsState(
                             targetValue = if (glow != null && charProgress > 0f) 1f else 0f,
                             animationSpec = tween(CHAR_RISE_MS, easing = FastOutSlowInEasing),
                             label = "charRise",
@@ -1277,7 +1305,7 @@ private fun AnimatedWord(
                         Box(
                             modifier =
                                 Modifier.graphicsLayer {
-                                    translationY = -charRise * CHAR_RISE_EM * fontPx
+                                    translationY = -charRiseState.value * CHAR_RISE_EM * fontPx
                                 },
                         ) {
                             // Glow: transparent ink, so only the Shadow lands and it follows the glyph
@@ -1336,12 +1364,12 @@ private fun ShapedLyricsWord(
     flare: Float,
     fontPx: Float,
 ) {
-    val rise by animateFloatAsState(
+    val riseState = animateFloatAsState(
         targetValue = if (glow != null && progress > 0f) 1f else 0f,
         animationSpec = tween(CHAR_RISE_MS, easing = FastOutSlowInEasing),
         label = "shapedWordRise",
     )
-    Box(Modifier.graphicsLayer { translationY = -rise * CHAR_RISE_EM * fontPx }) {
+    Box(Modifier.graphicsLayer { translationY = -riseState.value * CHAR_RISE_EM * fontPx }) {
         Text(text = word, style = style, color = restingColor)
         if (glow != null) {
             Text(

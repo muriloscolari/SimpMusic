@@ -66,6 +66,7 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.Platform
+import com.maxrave.simpmusic.expect.ui.ForceHighRefreshRate
 import com.maxrave.simpmusic.expect.ui.rememberVideoAspectRatio
 import com.maxrave.simpmusic.extension.GradientAngle
 import com.maxrave.simpmusic.extension.GradientOffset
@@ -157,6 +158,7 @@ fun NowPlayingScreen(
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         shape = RectangleShape,
     ) {
+        ForceHighRefreshRate()
         NowPlayingScreenContent(
             sharedViewModel = sharedViewModel,
             navController = navController,
@@ -179,6 +181,7 @@ fun NowPlayingScreenContent(
     dismissIcon: ImageVector,
     onDismiss: () -> Unit = {},
 ) {
+    ForceHighRefreshRate()
     val coroutineScope = rememberCoroutineScope()
 
     // ViewModel State
