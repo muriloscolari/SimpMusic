@@ -5,6 +5,8 @@
   result — these are the few strings the picker reads before any Compose code runs.
 -->
 <resources>
+    <string name="widget_compact_player_label">Mini Player</string>
+    <string name="widget_compact_player_description">Compact 1-row player bar with album cover and controls</string>
     <string name="widget_turntable_label">Turntable</string>
     <string name="widget_turntable_description">Album art with play and skip</string>
     <string name="widget_playlists_label">Playlists</string>
