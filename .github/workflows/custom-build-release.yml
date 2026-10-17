@@ -1,0 +1,156 @@
+name: Build & Release Custom (Android, Linux AppImage, Windows)
+
+on:
+  push:
+    branches:
+      - 'custom'
+    paths-ignore:
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+      - '.github/**/*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build All Platforms & Publish Release
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'microsoft'
+          cache: 'gradle'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 zip
+
+      - name: Configure local build properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > ./local.properties
+          echo "isFullBuild=true" >> ./gradle.properties
+
+      - name: Export library definitions
+        run: ./gradlew exportLibraryDefinitions --no-configuration-cache
+
+      - name: Build Android Release APKs
+        run: ./gradlew :androidApp:assembleRelease --no-configuration-cache
+
+      - name: Cache mpv-natives
+        uses: actions/cache@v4
+        with:
+          path: mpv-natives
+          key: mpv-natives-${{ hashFiles('composeApp/build.gradle.kts') }}
+
+      - name: Populate mpv-natives for desktop
+        run: ./gradlew :composeApp:mpvSetupAll --no-configuration-cache
+
+      - name: Generate Conveyor config
+        run: ./gradlew :desktopApp:writeConveyorConfig --no-configuration-cache
+
+      - name: Run Conveyor (Linux App)
+        uses: hydraulic-software/conveyor/actions/build@v22.0
+        with:
+          command: -Kapp.machines=linux.amd64.glibc make linux-app
+          agree_to_license: 1
+          signing_key: ${{ secrets.CONVEYOR_SIGNING_KEY }}
+
+      - name: Package Linux AppImage
+        run: ./gradlew :desktopApp:packageConveyorAppImage --no-configuration-cache
+
+      - name: Run Conveyor (Windows MSIX)
+        uses: hydraulic-software/conveyor/actions/build@v22.0
+        with:
+          command: '-Kapp.machines=[windows.amd64] make site'
+          agree_to_license: 1
+          signing_key: ${{ secrets.CONVEYOR_SIGNING_KEY }}
+
+      - name: Bundle Windows offline installer
+        run: |
+          set -euo pipefail
+          msix=$(ls output/simpmusic-*.x64.msix 2>/dev/null | head -1)
+          if [ -z "$msix" ]; then
+            echo "::error::No simpmusic-*.x64.msix found in output/"
+            exit 1
+          fi
+          mkdir -p installers/
+          stage="$(mktemp -d)"
+          cp scripts/windows/install.bat "$stage/"
+          cp output/simpmusic.crt        "$stage/"
+          cp "$msix"                      "$stage/"
+          ( cd "$stage" && zip -q -j \
+            "${GITHUB_WORKSPACE}/installers/SimpMusic-Windows-installer.zip" \
+            install.bat simpmusic.crt "$(basename "$msix")" )
+          rm -rf "$stage"
+
+      - name: Prepare Release Assets
+        id: prepare_assets
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version-name' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          mkdir -p release_assets
+
+          # Android APKs
+          if [ -f androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk ]; then
+            cp androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk release_assets/SimpMusic-v${VERSION}-arm64-v8a.apk
+          fi
+          if [ -f androidApp/build/outputs/apk/release/androidApp-universal-release.apk ]; then
+            cp androidApp/build/outputs/apk/release/androidApp-universal-release.apk release_assets/SimpMusic-v${VERSION}-universal.apk
+          fi
+
+          # Linux AppImage
+          appimage=$(ls desktopApp/build/appimage/conveyor/SimpMusic-*.AppImage 2>/dev/null | head -1)
+          if [ -n "$appimage" ]; then
+            cp "$appimage" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage
+          fi
+
+          # Windows offline installer zip
+          if [ -f installers/SimpMusic-Windows-installer.zip ]; then
+            cp installers/SimpMusic-Windows-installer.zip release_assets/SimpMusic-v${VERSION}-Windows-x64-installer.zip
+          fi
+
+          echo "Assets staged for release:"
+          ls -lh release_assets/
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.prepare_assets.outputs.version }}
+          SHORT_SHA: ${{ steps.prepare_assets.outputs.short_sha }}
+        run: |
+          TAG="custom-v${VERSION}-${SHORT_SHA}"
+          TITLE="SimpMusic v${VERSION} (${SHORT_SHA})"
+          BODY="Automated build for branch **custom** at commit \`${SHORT_SHA}\`.
+
+### Arquivos incluídos:
+- **Android (ARM64)**: \`SimpMusic-v${VERSION}-arm64-v8a.apk\` (recomendado para a maioria dos celulares modernos)
+- **Android (Universal)**: \`SimpMusic-v${VERSION}-universal.apk\` (compatível com qualquer arquitetura)
+- **Linux (AppImage)**: \`SimpMusic-v${VERSION}-Linux-x86_64.AppImage\` (executável direto no Linux)
+- **Windows (Instalador)**: \`SimpMusic-v${VERSION}-Windows-x64-installer.zip\` (extraia o ZIP e dê dois cliques em \`install.bat\`)"
+
+          echo "Publishing release $TAG..."
+          gh release create "$TAG" release_assets/* \
+            --title "$TITLE" \
+            --notes "$BODY" \
+            --prerelease=false
