@@ -1,51 +1,25 @@
 package com.maxrave.simpmusic.ui.widget
 
-import android.annotation.SuppressLint
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Resources
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import android.os.Looper
 import android.view.View
-import androidx.compose.runtime.Composable
+import android.widget.RemoteViews
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
-import androidx.glance.ColorFilter
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.LocalSize
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.action.actionStartActivity
-import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
-import androidx.glance.background
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
-import androidx.glance.layout.Column
-import androidx.glance.layout.ContentScale
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.layout.width
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
@@ -54,374 +28,490 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.kmpalette.generatePalette
 import com.kmpalette.palette.graphics.Palette
-import com.maxrave.common.Config
+import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.PlayerEvent
+import com.maxrave.domain.mediaservice.player.MediaPlayerListener
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import org.koin.core.qualifier.named
-import java.util.concurrent.atomic.AtomicBoolean
 
 private const val COMPACT_PLAYER_DECODE_PX = 192
+private const val COMPACT_ART_CORNER_PX = 28f
 private val DEFAULT_COMPACT_WIDGET_BG = Color(0xFF1C1B1F)
+private val DEFAULT_COMPACT_WIDGET_BG_ARGB = DEFAULT_COMPACT_WIDGET_BG.toArgb()
 
-class CompactPlayPauseAction :
-    ActionCallback,
-    KoinComponent {
-    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
-
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters,
-    ) {
-        CompactPlayerWidgetObserver.ensureObserving(context)
-        if (mediaPlayerHandler.nowPlayingState.value.mediaItem == GenericMediaItem.EMPTY) {
-            mediaPlayerHandler.restoreQueueAndPlay()
-        } else {
-            mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause)
-        }
-        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
-    }
-}
-
-class CompactPreviousAction :
-    ActionCallback,
-    KoinComponent {
-    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
-
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters,
-    ) {
-        CompactPlayerWidgetObserver.ensureObserving(context)
-        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
-        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
-    }
-}
-
-class CompactNextAction :
-    ActionCallback,
-    KoinComponent {
-    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
-
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters,
-    ) {
-        CompactPlayerWidgetObserver.ensureObserving(context)
-        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
-        CompactPlayerWidgetObserver.updateWidgetsIfPresent(context)
-    }
-}
-
-object CompactPlayerWidgetObserver : KoinComponent {
-    private val mediaPlayerHandler by inject<MediaPlayerHandler>()
-    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
-    private var observerJob: Job? = null
-    private val updateMutex = Mutex()
-    private val pendingUpdate = AtomicBoolean(false)
-
-    @OptIn(FlowPreview::class)
-    fun ensureObserving(context: Context) {
-        if (observerJob?.isActive == true) return
-        val appContext = context.applicationContext
-        synchronized(this) {
-            if (observerJob?.isActive == true) return
-            observerJob =
-                serviceScope.launch {
-                    try {
-                        val isPlayingFlow =
-                            mediaPlayerHandler.controlState
-                                .map { it.isPlaying }
-                                .distinctUntilChanged()
-
-                        val trackInfoFlow =
-                            mediaPlayerHandler.nowPlayingState
-                                .map { state ->
-                                    val mediaId = state.mediaItem.mediaId
-                                    val title =
-                                        state.songEntity?.title
-                                            ?: state.track?.title
-                                            ?: state.mediaItem.metadata.title
-                                            ?: ""
-                                    val artworkUri =
-                                        state.mediaItem.metadata.artworkUri
-                                            ?: state.songEntity?.thumbnails
-                                            ?: state.track?.thumbnails?.lastOrNull()?.url
-                                            ?: ""
-                                    Triple(mediaId, title, artworkUri)
-                                }
-                                .distinctUntilChanged()
-
-                        combine(isPlayingFlow, trackInfoFlow) { isPlaying, trackInfo ->
-                            Pair(isPlaying, trackInfo)
-                        }
-                            .distinctUntilChanged()
-                            .drop(1)
-                            .debounce(150)
-                            .collect {
-                                updateWidgetsIfPresent(appContext)
-                            }
-                    } catch (t: Throwable) {
-                        if (t !is CancellationException) {
-                            Logger.e("CompactPlayerWidget", "Observer error: ${t.message}")
-                        }
-                    }
-                }
-        }
-    }
-
-    suspend fun updateWidgetsIfPresent(context: Context) {
-        val appContext = context.applicationContext
-        pendingUpdate.set(true)
-        if (!updateMutex.tryLock()) {
-            return
-        }
-        try {
-            while (true) {
-                if (!pendingUpdate.getAndSet(false)) {
-                    break
-                }
-                try {
-                    val manager = GlanceAppWidgetManager(appContext)
-                    val glanceIds = manager.getGlanceIds(CompactPlayerWidget::class.java)
-                    if (glanceIds.isNotEmpty()) {
-                        CompactPlayerWidget().updateAll(appContext)
-                    }
-                } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    Logger.e("CompactPlayerWidget", "Failed to update compact widget: ${t.message}")
-                }
-            }
-        } finally {
-            updateMutex.unlock()
-            if (pendingUpdate.get()) {
-                serviceScope.launch { updateWidgetsIfPresent(appContext) }
-            }
-        }
-    }
-}
+private data class CompactWidgetSnapshot(
+    val isPlaying: Boolean,
+    val videoId: String,
+    val title: String,
+    val artist: String,
+    val thumbUrl: String,
+)
 
 /**
- * Compact 1-row playback bar widget inspired by Spotify and YouTube Music:
- * - Occupies a single vertical cell row (`targetCellHeight="1"`) and stretches to any horizontal width.
- * - Tinted with the dominant colour of the currently playing album cover.
- * - Left: rounded album artwork thumbnail.
- * - Middle: `Song Title` on top, `Artist` on bottom with single-line ellipsis that expands with horizontal resizing.
- * - Right: Previous, Play/Pause, and Next controls.
- * - Tapping the widget opens SimpMusic directly on the expanded Player screen if a song is playing,
- *   or on the Home screen when nothing is playing.
+ * Native AppWidget updater and observer for the Compact 1-row playback bar widget:
+ * - Uses direct [AppWidgetManager.updateAppWidget] with [RemoteViews] instead of Jetpack Glance's
+ *   WorkManager `SessionWorker`, eliminating background worker throttling on Samsung (OneUI) and
+ *   Xiaomi (MIUI/HyperOS) as well as Glance session state freezes.
+ * - Separates immediate synchronous UI updates (Play/Pause icon, Song Title, Artist) from
+ *   asynchronous artwork/palette loading so button taps and track changes reflect in < 1ms.
  */
-class CompactPlayerWidget :
-    GlanceAppWidget(),
-    KoinComponent {
-    override val sizeMode: SizeMode = SizeMode.Exact
-
+object CompactPlayerWidgetObserver : KoinComponent {
     private val mediaPlayerHandler by inject<MediaPlayerHandler>()
 
-    @SuppressLint("RestrictedApi")
-    override suspend fun provideGlance(
-        context: Context,
-        id: GlanceId,
-    ) {
-        CompactPlayerWidgetObserver.ensureObserving(context)
+    // Dedicated non-cancellable scope so widget observation survives service restarts/releases.
+    private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-        val controllerState = mediaPlayerHandler.controlState.value
-        val nowPlayingState = mediaPlayerHandler.nowPlayingState.value
+    @Volatile
+    private var isObserving = false
+
+    @Volatile
+    private var cachedThumbUrl: String = ""
+
+    @Volatile
+    private var cachedRoundedArtwork: Bitmap? = null
+
+    @Volatile
+    private var cachedBgColorArgb: Int = DEFAULT_COMPACT_WIDGET_BG_ARGB
+
+    @Volatile
+    private var placeholderRoundedBitmap: Bitmap? = null
+
+    private var artworkJob: Job? = null
+    private var loadingThumbUrl: String = ""
+
+    private var appContextRef: Context? = null
+
+    private val directPlayerListener =
+        object : MediaPlayerListener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val ctx = appContextRef ?: return
+                runOnMainImmediate {
+                    updateWidgetsImmediate(ctx, isPlayingOverride = isPlaying)
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val ctx = appContextRef ?: return
+                runOnMainImmediate {
+                    onStateChanged(ctx)
+                }
+            }
+
+            override fun onMediaItemTransition(
+                mediaItem: GenericMediaItem?,
+                reason: Int,
+            ) {
+                val ctx = appContextRef ?: return
+                runOnMainImmediate {
+                    onStateChanged(ctx, mediaItemOverride = mediaItem)
+                }
+            }
+        }
+
+    fun ensureObserving(context: Context) {
+        val appContext = context.applicationContext
+        appContextRef = appContext
+        if (isObserving) return
+        synchronized(this) {
+            if (isObserving) return
+            isObserving = true
+
+            widgetScope.launch {
+                runCatching {
+                    mediaPlayerHandler.player.removeListener(directPlayerListener)
+                    mediaPlayerHandler.player.addListener(directPlayerListener)
+                }
+            }
+
+            // 1. Immediate Play/Pause state observer
+            widgetScope.launch {
+                try {
+                    mediaPlayerHandler.controlState
+                        .map { it.isPlaying }
+                        .distinctUntilChanged()
+                        .collect { isPlaying ->
+                            updateWidgetsImmediate(appContext, isPlayingOverride = isPlaying)
+                        }
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        Logger.e("CompactPlayerWidget", "controlState observer error: ${t.message}")
+                    }
+                }
+            }
+
+            // 2. Immediate mediaItem transition observer
+            widgetScope.launch {
+                try {
+                    mediaPlayerHandler.nowPlaying.collect { mediaItem ->
+                        onStateChanged(appContext, mediaItemOverride = mediaItem)
+                    }
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        Logger.e("CompactPlayerWidget", "nowPlaying observer error: ${t.message}")
+                    }
+                }
+            }
+
+            // 3. Enriched track / songEntity metadata observer
+            widgetScope.launch {
+                try {
+                    mediaPlayerHandler.nowPlayingState.collect {
+                        onStateChanged(appContext)
+                    }
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        Logger.e("CompactPlayerWidget", "nowPlayingState observer error: ${t.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun refreshWidgets(context: Context) {
+        val appContext = context.applicationContext
+        appContextRef = appContext
+        runOnMainImmediate {
+            onStateChanged(appContext)
+        }
+    }
+
+    fun handleWidgetAction(
+        context: Context,
+        action: String,
+        onComplete: () -> Unit,
+    ) {
+        val appContext = context.applicationContext
+        appContextRef = appContext
+        widgetScope.launch {
+            try {
+                // Re-ensure direct listener is attached in case player was recreated
+                runCatching {
+                    mediaPlayerHandler.player.removeListener(directPlayerListener)
+                    mediaPlayerHandler.player.addListener(directPlayerListener)
+                }
+
+                when (action) {
+                    CompactPlayerWidgetReceiver.ACTION_PLAY_PAUSE -> {
+                        val hasMedia =
+                            mediaPlayerHandler.nowPlayingState.value.mediaItem != GenericMediaItem.EMPTY ||
+                                mediaPlayerHandler.nowPlaying.value != null ||
+                                runCatching { mediaPlayerHandler.player.currentMediaItem != null }.getOrDefault(false)
+
+                        if (!hasMedia) {
+                            ensureMediaServiceStarted(appContext)
+                            updateWidgetsImmediate(appContext, isPlayingOverride = true)
+                            mediaPlayerHandler.restoreQueueAndPlay()
+                            onStateChanged(appContext)
+                        } else {
+                            val currentlyPlaying =
+                                runCatching { mediaPlayerHandler.player.isPlaying }.getOrNull()
+                                    ?: mediaPlayerHandler.controlState.value.isPlaying
+                            val targetPlaying = !currentlyPlaying
+                            if (targetPlaying) {
+                                ensureMediaServiceStarted(appContext)
+                            }
+                            // Flip the Play/Pause icon on the home screen immediately (0ms wait)
+                            updateWidgetsImmediate(appContext, isPlayingOverride = targetPlaying)
+                            mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause)
+                            delay(150)
+                            onStateChanged(appContext)
+                        }
+                    }
+
+                    CompactPlayerWidgetReceiver.ACTION_PREVIOUS -> {
+                        ensureMediaServiceStarted(appContext)
+                        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
+                        onStateChanged(appContext)
+                        delay(150)
+                        onStateChanged(appContext)
+                    }
+
+                    CompactPlayerWidgetReceiver.ACTION_NEXT -> {
+                        ensureMediaServiceStarted(appContext)
+                        mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
+                        onStateChanged(appContext)
+                        delay(150)
+                        onStateChanged(appContext)
+                    }
+                }
+            } catch (t: Throwable) {
+                Logger.e("CompactPlayerWidget", "Error handling widget action $action: ${t.message}")
+            } finally {
+                onComplete()
+            }
+        }
+    }
+
+    private fun onStateChanged(
+        context: Context,
+         isPlayingOverride: Boolean? = null,
+        mediaItemOverride: GenericMediaItem? = null,
+    ) {
+        val appContext = context.applicationContext
+        val snapshot = updateWidgetsImmediate(appContext, isPlayingOverride, mediaItemOverride) ?: return
+        loadArtworkIfNeeded(appContext, snapshot.thumbUrl)
+    }
+
+    private fun updateWidgetsImmediate(
+        context: Context,
+        isPlayingOverride: Boolean? = null,
+        mediaItemOverride: GenericMediaItem? = null,
+    ): CompactWidgetSnapshot? {
+        val appContext = context.applicationContext
+        val appWidgetManager = AppWidgetManager.getInstance(appContext)
+        val componentName = ComponentName(appContext, CompactPlayerWidgetReceiver::class.java)
+        val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
+        if (appWidgetIds.isEmpty()) return null
+
+        val snapshot = extractSnapshot(isPlayingOverride, mediaItemOverride)
+        val hasCachedArt = snapshot.thumbUrl.isNotBlank() && snapshot.thumbUrl == cachedThumbUrl && cachedRoundedArtwork != null
+        val artworkBitmap =
+            if (hasCachedArt) {
+                cachedRoundedArtwork
+            } else {
+                getOrCreatePlaceholderBitmap(appContext)
+            }
+        val bgColorArgb =
+            if (hasCachedArt) {
+                cachedBgColorArgb
+            } else if (snapshot.title.isNotBlank() && cachedRoundedArtwork != null) {
+                cachedBgColorArgb
+            } else {
+                DEFAULT_COMPACT_WIDGET_BG_ARGB
+            }
+
+        val views = buildRemoteViews(appContext, snapshot, artworkBitmap, bgColorArgb)
+        appWidgetManager.updateAppWidget(appWidgetIds, views)
+        return snapshot
+    }
+
+    private fun loadArtworkIfNeeded(
+        context: Context,
+        thumbUrl: String,
+    ) {
+        if (thumbUrl.isBlank()) {
+            cachedThumbUrl = ""
+            cachedRoundedArtwork = null
+            cachedBgColorArgb = DEFAULT_COMPACT_WIDGET_BG_ARGB
+            return
+        }
+        if (thumbUrl == cachedThumbUrl && cachedRoundedArtwork != null) {
+            return
+        }
+        if (thumbUrl == loadingThumbUrl && artworkJob?.isActive == true) {
+            return
+        }
+
+        artworkJob?.cancel()
+        loadingThumbUrl = thumbUrl
+        val appContext = context.applicationContext
+        artworkJob =
+            widgetScope.launch {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        val rawBitmap = appContext.loadCompactWidgetArtwork(thumbUrl) ?: return@withContext null
+                        val bgColor =
+                            try {
+                                rawBitmap.asImageBitmap().generatePalette().getDominantWidgetColor().toArgb()
+                            } catch (t: Throwable) {
+                                DEFAULT_COMPACT_WIDGET_BG_ARGB
+                            }
+                        val roundedBitmap = createRoundedSquareBitmap(rawBitmap, COMPACT_PLAYER_DECODE_PX, COMPACT_ART_CORNER_PX)
+                        Pair(roundedBitmap, bgColor)
+                    }
+
+                if (result != null) {
+                    cachedThumbUrl = thumbUrl
+                    cachedRoundedArtwork = result.first
+                    cachedBgColorArgb = result.second
+                    updateWidgetsImmediate(appContext)
+                }
+            }
+    }
+
+    private fun extractSnapshot(
+        isPlayingOverride: Boolean? = null,
+        mediaItemOverride: GenericMediaItem? = null,
+    ): CompactWidgetSnapshot {
+        val state = mediaPlayerHandler.nowPlayingState.value
+        val playerItem = runCatching { mediaPlayerHandler.player.currentMediaItem }.getOrNull()
+        val nowPlayingItem = mediaPlayerHandler.nowPlaying.value
+
+        val activeMediaItem =
+            mediaItemOverride?.takeIf { it != GenericMediaItem.EMPTY }
+                ?: playerItem?.takeIf { it != GenericMediaItem.EMPTY }
+                ?: nowPlayingItem?.takeIf { it != GenericMediaItem.EMPTY }
+                ?: state.mediaItem.takeIf { it != GenericMediaItem.EMPTY }
+
+        val rawMediaId = activeMediaItem?.mediaId.orEmpty()
+        val videoId = rawMediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
+
+        // Only use songEntity / track when their videoId matches the currently active mediaItem
+        val matchingSong = state.songEntity?.takeIf { videoId.isEmpty() || it.videoId == videoId }
+        val matchingTrack = state.track?.takeIf { videoId.isEmpty() || it.videoId == videoId }
 
         val title =
-            nowPlayingState.songEntity?.title?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.track?.title?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.mediaItem.metadata.title?.takeIf { it.isNotBlank() }
+            matchingSong?.title?.takeIf { it.isNotBlank() }
+                ?: matchingTrack?.title?.takeIf { it.isNotBlank() }
+                ?: activeMediaItem?.metadata?.title?.takeIf { it.isNotBlank() }
                 ?: ""
+
         val artist =
-            nowPlayingState.songEntity?.artistName?.joinToString(", ")?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.track?.artists?.mapNotNull { it.name.takeIf(String::isNotBlank) }?.joinToString(", ")?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.mediaItem.metadata.artist?.takeIf { it.isNotBlank() }
+            matchingSong?.artistName?.joinToString(", ")?.takeIf { it.isNotBlank() }
+                ?: matchingTrack?.artists?.mapNotNull { it.name.takeIf(String::isNotBlank) }?.joinToString(", ")?.takeIf { it.isNotBlank() }
+                ?: activeMediaItem?.metadata?.artist?.takeIf { it.isNotBlank() }
                 ?: ""
+
         val thumbUrl =
-            nowPlayingState.mediaItem.metadata.artworkUri?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.songEntity?.thumbnails?.takeIf { it.isNotBlank() }
-                ?: nowPlayingState.track?.thumbnails?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+            matchingSong?.thumbnails?.takeIf { it.isNotBlank() }
+                ?: activeMediaItem?.metadata?.artworkUri?.takeIf { it.isNotBlank() }
+                ?: matchingTrack?.thumbnails?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+                ?: ""
 
-        val artwork = context.loadCompactWidgetArtwork(thumbUrl)
-        val bgColor =
-            if (artwork != null) {
-                try {
-                    artwork.asImageBitmap().generatePalette().getDominantWidgetColor()
-                } catch (t: Throwable) {
-                    DEFAULT_COMPACT_WIDGET_BG
-                }
+        val isPlaying =
+            isPlayingOverride
+                ?: runCatching { mediaPlayerHandler.player.isPlaying }.getOrNull()
+                ?: mediaPlayerHandler.controlState.value.isPlaying
+
+        return CompactWidgetSnapshot(
+            isPlaying = isPlaying,
+            videoId = videoId,
+            title = title,
+            artist = artist,
+            thumbUrl = thumbUrl,
+        )
+    }
+
+    private fun buildRemoteViews(
+        context: Context,
+        snapshot: CompactWidgetSnapshot,
+        artworkBitmap: Bitmap?,
+        bgColorArgb: Int,
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.widget_compact_player)
+
+        views.setInt(R.id.widget_bg, "setColorFilter", bgColorArgb)
+
+        if (artworkBitmap != null) {
+            views.setImageViewBitmap(R.id.widget_artwork, artworkBitmap)
+        } else {
+            views.setImageViewResource(R.id.widget_artwork, R.drawable.holder)
+        }
+
+        val displayTitle = snapshot.title.ifBlank { context.getString(R.string.app_name) }
+        views.setTextViewText(R.id.widget_title, displayTitle)
+        views.setContentDescription(R.id.widget_artwork, displayTitle)
+
+        if (snapshot.artist.isNotBlank()) {
+            views.setTextViewText(R.id.widget_artist, snapshot.artist)
+            views.setViewVisibility(R.id.widget_artist, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_artist, View.GONE)
+        }
+
+        val playPauseIcon =
+            if (snapshot.isPlaying) {
+                R.drawable.rounded_pause_24
             } else {
-                DEFAULT_COMPACT_WIDGET_BG
+                R.drawable.rounded_play_arrow_24
             }
+        views.setImageViewResource(R.id.widget_btn_play_pause, playPauseIcon)
+        views.setContentDescription(R.id.widget_btn_play_pause, if (snapshot.isPlaying) "Pause" else "Play")
 
-        val isPlayingNow = controllerState.isPlaying && title.isNotBlank()
+        val isPlayingNow = snapshot.isPlaying && snapshot.title.isNotBlank()
         val openIntent = context.openCompactWidgetIntent(isPlaying = isPlayingNow)
+        val openPendingIntent =
+            PendingIntent.getActivity(
+                context,
+                if (isPlayingNow) 101 else 100,
+                openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
 
-        provideContent {
-            GlanceTheme {
-                val widgetHeight = LocalSize.current.height
-                val artSize = (widgetHeight - 6.dp).coerceIn(44.dp, 64.dp)
+        views.setOnClickPendingIntent(R.id.widget_root, openPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_artwork, openPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_text_container, openPendingIntent)
 
-                Row(
-                    modifier =
-                        GlanceModifier
-                            .fillMaxSize()
-                            .background(ColorProvider(bgColor))
-                            .cornerRadius(android.R.dimen.system_app_widget_background_radius)
-                            .padding(start = 6.dp, end = 8.dp, top = 3.dp, bottom = 3.dp)
-                            .clickable(
-                                actionStartActivity(openIntent),
-                                rippleOverride = R.drawable.no_ripple,
-                            ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Left: Album cover thumbnail
-                    Box(
-                        modifier =
-                            GlanceModifier
-                                .size(artSize)
-                                .clickable(
-                                    actionStartActivity(openIntent),
-                                    rippleOverride = R.drawable.no_ripple,
-                                ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        val bitmap = artwork
-                        if (bitmap != null) {
-                            Image(
-                                provider = ImageProvider(bitmap),
-                                contentDescription = title.ifBlank { context.getString(R.string.app_name) },
-                                contentScale = ContentScale.Crop,
-                                modifier = GlanceModifier.fillMaxSize().cornerRadius(8.dp),
-                            )
-                        } else {
-                            Image(
-                                provider = ImageProvider(R.drawable.holder),
-                                contentDescription = context.getString(R.string.app_name),
-                                contentScale = ContentScale.Crop,
-                                modifier = GlanceModifier.fillMaxSize().cornerRadius(8.dp),
-                            )
-                        }
-                    }
+        views.setOnClickPendingIntent(
+            R.id.widget_btn_prev,
+            buildActionPendingIntent(context, CompactPlayerWidgetReceiver.ACTION_PREVIOUS, 201),
+        )
+        views.setOnClickPendingIntent(
+            R.id.widget_btn_play_pause,
+            buildActionPendingIntent(context, CompactPlayerWidgetReceiver.ACTION_PLAY_PAUSE, 202),
+        )
+        views.setOnClickPendingIntent(
+            R.id.widget_btn_next,
+            buildActionPendingIntent(context, CompactPlayerWidgetReceiver.ACTION_NEXT, 203),
+        )
 
-                    Spacer(GlanceModifier.width(8.dp))
+        return views
+    }
 
-                    // Middle: Song title (top) and artist (bottom)
-                    Column(
-                        modifier =
-                            GlanceModifier
-                                .defaultWeight()
-                                .clickable(
-                                    actionStartActivity(openIntent),
-                                    rippleOverride = R.drawable.no_ripple,
-                                ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = title.ifBlank { context.getString(R.string.app_name) },
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = ColorProvider(Color.White),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                        )
-                        if (artist.isNotBlank()) {
-                            Spacer(GlanceModifier.height(2.dp))
-                            Text(
-                                text = artist,
-                                maxLines = 1,
-                                style =
-                                    TextStyle(
-                                        color = ColorProvider(Color.White.copy(alpha = 0.75f)),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Normal,
-                                    ),
-                            )
-                        }
-                    }
-
-                    // Right: Previous, Play/Pause, Next controls
-                    val systemRtl = Resources.getSystem().configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
-                    val previousButton: @Composable () -> Unit = {
-                        Image(
-                            provider = ImageProvider(R.drawable.rounded_skip_previous_24),
-                            contentDescription = "Previous",
-                            colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                            modifier =
-                                GlanceModifier
-                                    .size(34.dp)
-                                    .padding(4.dp)
-                                    .clickable(
-                                        onClick = actionRunCallback<CompactPreviousAction>(),
-                                        rippleOverride = R.drawable.no_ripple,
-                                    ),
-                        )
-                    }
-                    val nextButton: @Composable () -> Unit = {
-                        Image(
-                            provider = ImageProvider(R.drawable.rounded_skip_next_24),
-                            contentDescription = "Next",
-                            colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                            modifier =
-                                GlanceModifier
-                                    .size(34.dp)
-                                    .padding(4.dp)
-                                    .clickable(
-                                        onClick = actionRunCallback<CompactNextAction>(),
-                                        rippleOverride = R.drawable.no_ripple,
-                                    ),
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (systemRtl) nextButton() else previousButton()
-                        Spacer(GlanceModifier.width(4.dp))
-                        Image(
-                            provider =
-                                if (controllerState.isPlaying) {
-                                    ImageProvider(R.drawable.rounded_pause_24)
-                                } else {
-                                    ImageProvider(R.drawable.rounded_play_arrow_24)
-                                },
-                            contentDescription = if (controllerState.isPlaying) "Pause" else "Play",
-                            colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                            modifier =
-                                GlanceModifier
-                                    .size(38.dp)
-                                    .padding(4.dp)
-                                    .clickable(
-                                        onClick = actionRunCallback<CompactPlayPauseAction>(),
-                                        rippleOverride = R.drawable.no_ripple,
-                                    ),
-                        )
-                        Spacer(GlanceModifier.width(4.dp))
-                        if (systemRtl) previousButton() else nextButton()
-                    }
-                }
+    private fun buildActionPendingIntent(
+        context: Context,
+        action: String,
+        requestCode: Int,
+    ): PendingIntent {
+        val intent =
+            Intent(context, CompactPlayerWidgetReceiver::class.java).apply {
+                this.action = action
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun ensureMediaServiceStarted(context: Context) {
+        runCatching {
+            val serviceIntent =
+                Intent().setClassName(
+                    context.packageName,
+                    "com.maxrave.media3.service.SimpleMediaService",
+                )
+            context.startService(serviceIntent)
+        }
+    }
+
+    private fun getOrCreatePlaceholderBitmap(context: Context): Bitmap? {
+        placeholderRoundedBitmap?.let { return it }
+        return runCatching {
+            val drawable = AppCompatResources.getDrawable(context, R.drawable.holder) ?: return null
+            val raw = createBitmap(COMPACT_PLAYER_DECODE_PX, COMPACT_PLAYER_DECODE_PX)
+            val canvas = Canvas(raw)
+            drawable.setBounds(0, 0, COMPACT_PLAYER_DECODE_PX, COMPACT_PLAYER_DECODE_PX)
+            drawable.draw(canvas)
+            createRoundedSquareBitmap(raw, COMPACT_PLAYER_DECODE_PX, COMPACT_ART_CORNER_PX).also {
+                placeholderRoundedBitmap = it
+            }
+        }.getOrNull()
+    }
+
+    private fun runOnMainImmediate(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            widgetScope.launch { block() }
         }
     }
 }
@@ -432,6 +522,38 @@ private fun Context.openCompactWidgetIntent(isPlaying: Boolean): Intent =
         "simpmusic://player?playing=$isPlaying".toUri(),
     ).setClass(this, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+
+private fun createRoundedSquareBitmap(
+    source: Bitmap,
+    sizePx: Int,
+    cornerRadiusPx: Float,
+): Bitmap {
+    val minEdge = minOf(source.width, source.height).coerceAtLeast(1)
+    val cropX = (source.width - minEdge) / 2
+    val cropY = (source.height - minEdge) / 2
+    val cropped =
+        if (cropX == 0 && cropY == 0 && source.width == minEdge && source.height == minEdge) {
+            source
+        } else {
+            Bitmap.createBitmap(source, cropX, cropY, minEdge, minEdge)
+        }
+    val scaled =
+        if (cropped.width == sizePx && cropped.height == sizePx) {
+            cropped
+        } else {
+            Bitmap.createScaledBitmap(cropped, sizePx, sizePx, true)
+        }
+
+    val output = createBitmap(sizePx, sizePx)
+    val canvas = Canvas(output)
+    val paint =
+        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            shader = BitmapShader(scaled, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
+    val rect = RectF(0f, 0f, sizePx.toFloat(), sizePx.toFloat())
+    canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+    return output
+}
 
 /**
  * Extracts the dominant colour from the album artwork [Palette], scaling luminance only when
@@ -466,7 +588,7 @@ private fun Palette?.getDominantWidgetColor(): Color {
 
 private suspend fun Context.loadCompactWidgetArtwork(url: String?): Bitmap? {
     if (url.isNullOrBlank()) return null
-    return withTimeoutOrNull(2000L) {
+    return withTimeoutOrNull(4000L) {
         try {
             val request =
                 ImageRequest
@@ -484,4 +606,3 @@ private suspend fun Context.loadCompactWidgetArtwork(url: String?): Bitmap? {
         }
     }
 }
-

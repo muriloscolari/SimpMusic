@@ -296,6 +296,9 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_PLAY_PAUSE" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_PREVIOUS" />
+                <action android:name="com.maxrave.simpmusic.action.WIDGET_NEXT" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
