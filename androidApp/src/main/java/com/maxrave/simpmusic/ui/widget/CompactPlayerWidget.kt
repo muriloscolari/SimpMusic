@@ -50,8 +50,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
-private const val COMPACT_PLAYER_DECODE_PX = 192
-private const val COMPACT_ART_CORNER_PX = 28f
+private const val COMPACT_PLAYER_DECODE_PX = 256
+private const val COMPACT_ART_CORNER_PX = 36f
 private val DEFAULT_COMPACT_WIDGET_BG = Color(0xFF1C1B1F)
 private val DEFAULT_COMPACT_WIDGET_BG_ARGB = DEFAULT_COMPACT_WIDGET_BG.toArgb()
 
