@@ -142,7 +142,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     // monitor. With vsync off, skiko paces frames with its refresh-rate frame
     // limiter (skiko.vsync.framelimit.fallback, on by default) instead.
     // Windows renders via DirectX and shows no such freeze — leave it alone.
-    if (!System.getProperty("os.name", "").contains("Windows", ignoreCase = true)) {
+    if (System.getProperty("os.name", "").contains("Mac", ignoreCase = true)) {
         System.setProperty("skiko.vsync.enabled", "false")
     }
 
@@ -440,7 +440,20 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     }
                 window.addComponentListener(componentListener)
 
+                val statePollTimer =
+                    Timer(500) {
+                        val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
+                        if (isIconic && !DesktopGpuManager.isMinimized) {
+                            isAwtIconified = true
+                            DesktopGpuManager.onMinimized(window)
+                        } else if (!isIconic && DesktopGpuManager.isMinimized) {
+                            isAwtIconified = false
+                            DesktopGpuManager.onRestored(window)
+                        }
+                    }.apply { start() }
+
                 onDispose {
+                    statePollTimer.stop()
                     window.removeWindowStateListener(stateListener)
                     window.removeWindowListener(windowListener)
                     window.removeComponentListener(componentListener)
