@@ -71,6 +71,12 @@
 -dontwarn org.jetbrains.skiko.**
 -dontwarn org.jetbrains.skia.**
 
+# Desktop GPU Manager & Memory Trimmer
+-keep class com.maxrave.simpmusic.DesktopGpuManager { *; }
+-keep class com.maxrave.simpmusic.ui.component.WindowMinimizationKt { *; }
+-keep class com.simpmusic.media_jvm.memory.** { *; }
+
+
 # compottie (Lottie renderer) draws via skiko (PlatformShader.skiko, SkikoPathBuilder).
 # On release, proguard obfuscation mangles its internal classes so the renderer runs but
 # paints nothing — the animation stays blank with no crash. Keep them un-obfuscated.

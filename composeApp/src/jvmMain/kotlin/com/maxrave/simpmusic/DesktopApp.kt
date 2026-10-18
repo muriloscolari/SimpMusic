@@ -82,10 +82,14 @@ import simpmusic.composeapp.generated.resources.quit_app
 import simpmusic.composeapp.generated.resources.time_out_check_internet_connection_or_change_piped_instance_in_settings
 import java.awt.Canvas
 import java.awt.Container
+import java.awt.Frame
+import java.awt.KeyboardFocusManager
+import java.awt.Window
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.awt.event.WindowStateListener
 import java.io.File
 import java.security.MessageDigest
 import javax.swing.Timer
@@ -129,6 +133,9 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     System.setProperty("compose.interop.blending", "true")
     System.setProperty("compose.layers.type", "COMPONENT")
 
+    // Cap Skiko's Skia GPU resource cache to 48MB instead of default 256MB-512MB
+    System.setProperty("skiko.gpu.resourceCacheLimit", "48M")
+
     // Skiko's vsync wait can park the EDT forever after a display change:
     // macOS waits on a CVDisplayLink-signalled NSConditionLock with no timeout
     // (DisplayLinkThrottler.mm), Linux blocks inside the vsync'd glXSwapBuffers
@@ -137,7 +144,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     // monitor. With vsync off, skiko paces frames with its refresh-rate frame
     // limiter (skiko.vsync.framelimit.fallback, on by default) instead.
     // Windows renders via DirectX and shows no such freeze — leave it alone.
-    if (!System.getProperty("os.name", "").contains("Windows", ignoreCase = true)) {
+    if (System.getProperty("os.name", "").contains("Mac", ignoreCase = true)) {
         System.setProperty("skiko.vsync.enabled", "false")
     }
 
@@ -372,18 +379,144 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             state = windowState,
             visible = isVisible,
         ) {
-            // Returning from macOS System Settings is the only reliable time to learn whether the
-            // user enabled notifications after denying the one-shot system prompt.
+            var isAwtIconified by remember { mutableStateOf(false) }
+            var isAwtBackgrounded by remember { mutableStateOf(false) }
+            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isAwtBackgrounded
+
+            LaunchedEffect(isWindowMinimized) {
+                if (isWindowMinimized) {
+                    DesktopGpuManager.onMinimized(window)
+                } else {
+                    DesktopGpuManager.onRestored(window)
+                }
+            }
+
             DisposableEffect(window) {
-                val listener =
-                    object : WindowAdapter() {
-                        override fun windowGainedFocus(event: WindowEvent) {
-                            desktopNotificationManager.refreshPermission()
+                DesktopGpuManager.attach(window)
+
+                fun isWindowActiveOrFocused(w: Window): Boolean {
+                    if (w.isFocused || w.isActive) return true
+                    val kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                    if (kfm.activeWindow == w || kfm.focusedWindow == w) return true
+                    return runCatching {
+                        w.ownedWindows.any { it.isShowing && (it.isFocused || it.isActive || it == kfm.activeWindow || it == kfm.focusedWindow) }
+                    }.getOrDefault(false)
+                }
+
+                var deactivationTimer: Timer? = null
+
+                fun triggerWakeup() {
+                    deactivationTimer?.stop()
+                    deactivationTimer = null
+                    isAwtBackgrounded = false
+                    val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
+                    if (!isIconic) {
+                        isAwtIconified = false
+                        DesktopGpuManager.onRestored(window)
+                    }
+                }
+
+                fun scheduleSleep() {
+                    deactivationTimer?.stop()
+                    deactivationTimer = Timer(200) {
+                        if (!isWindowActiveOrFocused(window)) {
+                            isAwtBackgrounded = true
+                            DesktopGpuManager.onMinimized(window)
+                        }
+                    }.apply {
+                        isRepeats = false
+                        start()
+                    }
+                }
+
+                val stateListener = WindowStateListener { e ->
+                    val isIconified = (e.newState and Frame.ICONIFIED) != 0
+                    val wasIconified = (e.oldState and Frame.ICONIFIED) != 0
+                    if (isIconified != wasIconified) {
+                        isAwtIconified = isIconified
+                        if (isIconified) {
+                            DesktopGpuManager.onMinimized(window)
+                        } else if (isWindowActiveOrFocused(window)) {
+                            triggerWakeup()
                         }
                     }
-                window.addWindowFocusListener(listener)
+                }
+                window.addWindowStateListener(stateListener)
+
+                val windowListener =
+                    object : WindowAdapter() {
+                        override fun windowIconified(e: WindowEvent) {
+                            isAwtIconified = true
+                            DesktopGpuManager.onMinimized(window)
+                        }
+
+                        override fun windowDeiconified(e: WindowEvent) {
+                            isAwtIconified = false
+                            if (isWindowActiveOrFocused(window)) {
+                                triggerWakeup()
+                            }
+                        }
+
+                        override fun windowActivated(e: WindowEvent) {
+                            triggerWakeup()
+                        }
+
+                        override fun windowDeactivated(e: WindowEvent) {
+                            scheduleSleep()
+                        }
+
+                        override fun windowGainedFocus(e: WindowEvent) {
+                            desktopNotificationManager.refreshPermission()
+                            triggerWakeup()
+                        }
+
+                        override fun windowLostFocus(e: WindowEvent) {
+                            scheduleSleep()
+                        }
+                    }
+                window.addWindowListener(windowListener)
+                window.addWindowFocusListener(windowListener)
+
+                val componentListener =
+                    object : ComponentAdapter() {
+                        override fun componentHidden(e: ComponentEvent) {
+                            DesktopGpuManager.onMinimized(window)
+                        }
+
+                        override fun componentShown(e: ComponentEvent) {
+                            if (isWindowActiveOrFocused(window)) {
+                                triggerWakeup()
+                            }
+                        }
+                    }
+                window.addComponentListener(componentListener)
+
+                val statePollTimer =
+                    Timer(500) {
+                        val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
+                        if (isIconic) {
+                            if (!isAwtIconified) isAwtIconified = true
+                            if (!DesktopGpuManager.isMinimized) DesktopGpuManager.onMinimized(window)
+                        } else {
+                            if (isAwtIconified) isAwtIconified = false
+                            val active = isWindowActiveOrFocused(window)
+                            if (!active && !isAwtBackgrounded) {
+                                isAwtBackgrounded = true
+                                DesktopGpuManager.onMinimized(window)
+                            } else if (active && (isAwtBackgrounded || DesktopGpuManager.isMinimized)) {
+                                triggerWakeup()
+                            }
+                        }
+                    }.apply { start() }
+
                 onDispose {
-                    window.removeWindowFocusListener(listener)
+                    deactivationTimer?.stop()
+                    statePollTimer.stop()
+                    window.removeWindowStateListener(stateListener)
+                    window.removeWindowListener(windowListener)
+                    window.removeWindowFocusListener(windowListener)
+                    window.removeComponentListener(componentListener)
+                    DesktopGpuManager.detach()
                 }
             }
             // AWT on GNOME/XWayland (CMP-9528): moving the window to another monitor puts the
@@ -486,6 +619,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                                         },
                                     ),
                                 )
+                            }.memoryCache {
+                                coil3.memory.MemoryCache.Builder()
+                                    .maxSizePercent(context, 0.08)
+                                    .maxSizeBytes(24L * 1024 * 1024)
+                                    .build()
                             }.diskCachePolicy(CachePolicy.ENABLED)
                             .networkCachePolicy(CachePolicy.ENABLED)
                             .diskCache(
@@ -499,16 +637,21 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                             // so a square holder over a wide banner leaves the banner zoomed after the fade.
                             .preferEndFirstIntrinsicSize(true)
                             .build()
+                    DesktopGpuManager.registerImageLoader(imageLoader)
                     imageLoader
                 }
-                App(
-                    showDesktopNotificationPermissionDialog = showNotificationPermissionDialog,
-                    onDismissDesktopNotificationPermissionDialog =
-                        desktopNotificationManager::dismissPermissionDialog,
-                    onOpenDesktopNotificationSettings =
-                        desktopNotificationManager::openNotificationSettings,
-                )
-                ToastHost()
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.maxrave.simpmusic.ui.component.LocalWindowMinimized provides isWindowMinimized,
+                ) {
+                    App(
+                        showDesktopNotificationPermissionDialog = showNotificationPermissionDialog,
+                        onDismissDesktopNotificationPermissionDialog =
+                            desktopNotificationManager::dismissPermissionDialog,
+                        onOpenDesktopNotificationSettings =
+                            desktopNotificationManager::openNotificationSettings,
+                    )
+                    ToastHost()
+                }
             }
         }
 

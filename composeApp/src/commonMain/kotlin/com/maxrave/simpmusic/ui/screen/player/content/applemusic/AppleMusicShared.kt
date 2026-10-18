@@ -644,7 +644,8 @@ internal fun AppleMusicTimesRow(
                 targetValue = if (!state.timelineState.isCrossfading && quality != null) 1f else 0f,
                 label = "appleMusicQualityLabelAlpha",
             )
-            if (crossfadeLabelAlpha > 0f) {
+            val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
+            if (crossfadeLabelAlpha > 0f && !isWindowMinimized) {
                 val sweepTransition = rememberInfiniteTransition(label = "appleMusicCrossfadeSweep")
                 val crossfadeSweep by sweepTransition.animateFloat(
                     initialValue = 0f,

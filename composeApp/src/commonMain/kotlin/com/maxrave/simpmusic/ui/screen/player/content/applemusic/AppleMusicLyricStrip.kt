@@ -84,10 +84,11 @@ internal fun AppleMusicLyricStrip(
     // until the next one, and the last is held to the end of the track.
     val line = if (synced) lyrics.lines?.getOrNull(state.currentLyricLineIndex) else null
 
+    val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
     val playhead =
         rememberSweepPlayhead(
             rawMs = state.timelineState.current - state.lyricsOffsetMs,
-            running = line != null && richSynced && state.controllerState.isPlaying,
+            running = line != null && richSynced && state.controllerState.isPlaying && !isWindowMinimized,
         )
 
     AnimatedContent(

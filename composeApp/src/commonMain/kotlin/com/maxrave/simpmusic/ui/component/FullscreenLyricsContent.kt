@@ -294,8 +294,9 @@ fun FullscreenLyricsContent(
             }
         } else {
             // Crossfade: RGB rainbow color cycling when transitioning between tracks
+            val isWindowMinimized = LocalWindowMinimized.current
             val rainbowColor =
-                if (timelineState.isCrossfading) {
+                if (timelineState.isCrossfading && !isWindowMinimized) {
                     val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
                     val rainbowHue by infiniteTransition.animateFloat(
                         initialValue = 0f,
@@ -1223,40 +1224,44 @@ internal fun AnimatedLyricsGradientBackground(
     // Dynamic gradient animation - MULTIPLE DIRECTIONS
     // Replaces the previous `while(true) { delay(16) }` loop with a Compose
     // infinite transition.
-    val gradientTransition = rememberInfiniteTransition(label = "lyricsGradient")
-    val animatedAngle by gradientTransition.animateFloat(
-        initialValue = -45f,
-        targetValue = 45f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 6000, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "lyricsGradientAngle",
-    )
-    val animatedOffsetX by gradientTransition.animateFloat(
-        initialValue = -1500f,
-        targetValue = 1500f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 8000, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "lyricsGradientOffsetX",
-    )
-    val animatedOffsetY by gradientTransition.animateFloat(
-        initialValue = -1000f,
-        targetValue = 1000f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 8000, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "lyricsGradientOffsetY",
-    )
-    val gradientAngle = animatedAngle
-    val gradientOffsetX = animatedOffsetX
-    val gradientOffsetY = animatedOffsetY
+    val isWindowMinimized = LocalWindowMinimized.current
+    val (gradientAngle, gradientOffsetX, gradientOffsetY) =
+        if (!isWindowMinimized) {
+            val gradientTransition = rememberInfiniteTransition(label = "lyricsGradient")
+            val animatedAngle by gradientTransition.animateFloat(
+                initialValue = -45f,
+                targetValue = 45f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 6000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "lyricsGradientAngle",
+            )
+            val animatedOffsetX by gradientTransition.animateFloat(
+                initialValue = -1500f,
+                targetValue = 1500f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 8000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "lyricsGradientOffsetX",
+            )
+            val animatedOffsetY by gradientTransition.animateFloat(
+                initialValue = -1000f,
+                targetValue = 1000f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 8000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "lyricsGradientOffsetY",
+            )
+            Triple(animatedAngle, animatedOffsetX, animatedOffsetY)
+        } else {
+            Triple(0f, 0f, 0f)
+        }
 
     // Smooth color animation based on lyrics color
     LaunchedEffect(color) {

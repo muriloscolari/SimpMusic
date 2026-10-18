@@ -91,6 +91,10 @@ import kotlin.math.sin
 fun Modifier.shimmer(): Modifier =
     composed {
         val appColors = LocalAppColors.current
+        val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
+        if (isWindowMinimized) {
+            return@composed background(appColors.shimmerBackground)
+        }
         var size by remember {
             mutableStateOf(IntSize.Zero)
         }
