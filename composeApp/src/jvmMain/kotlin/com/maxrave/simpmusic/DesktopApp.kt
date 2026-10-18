@@ -83,6 +83,8 @@ import simpmusic.composeapp.generated.resources.time_out_check_internet_connecti
 import java.awt.Canvas
 import java.awt.Container
 import java.awt.Frame
+import java.awt.KeyboardFocusManager
+import java.awt.Window
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
@@ -378,7 +380,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             visible = isVisible,
         ) {
             var isAwtIconified by remember { mutableStateOf(false) }
-            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified
+            var isAwtBackgrounded by remember { mutableStateOf(false) }
+            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isAwtBackgrounded
 
             LaunchedEffect(isWindowMinimized) {
                 if (isWindowMinimized) {
@@ -391,6 +394,41 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             DisposableEffect(window) {
                 DesktopGpuManager.attach(window)
 
+                fun isWindowActiveOrFocused(w: Window): Boolean {
+                    if (w.isFocused || w.isActive) return true
+                    val kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                    if (kfm.activeWindow == w || kfm.focusedWindow == w) return true
+                    return runCatching {
+                        w.ownedWindows.any { it.isShowing && (it.isFocused || it.isActive || it == kfm.activeWindow || it == kfm.focusedWindow) }
+                    }.getOrDefault(false)
+                }
+
+                var deactivationTimer: Timer? = null
+
+                fun triggerWakeup() {
+                    deactivationTimer?.stop()
+                    deactivationTimer = null
+                    isAwtBackgrounded = false
+                    val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
+                    if (!isIconic) {
+                        isAwtIconified = false
+                        DesktopGpuManager.onRestored(window)
+                    }
+                }
+
+                fun scheduleSleep() {
+                    deactivationTimer?.stop()
+                    deactivationTimer = Timer(200) {
+                        if (!isWindowActiveOrFocused(window)) {
+                            isAwtBackgrounded = true
+                            DesktopGpuManager.onMinimized(window)
+                        }
+                    }.apply {
+                        isRepeats = false
+                        start()
+                    }
+                }
+
                 val stateListener = WindowStateListener { e ->
                     val isIconified = (e.newState and Frame.ICONIFIED) != 0
                     val wasIconified = (e.oldState and Frame.ICONIFIED) != 0
@@ -398,8 +436,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         isAwtIconified = isIconified
                         if (isIconified) {
                             DesktopGpuManager.onMinimized(window)
-                        } else {
-                            DesktopGpuManager.onRestored(window)
+                        } else if (isWindowActiveOrFocused(window)) {
+                            triggerWakeup()
                         }
                     }
                 }
@@ -414,17 +452,30 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
 
                         override fun windowDeiconified(e: WindowEvent) {
                             isAwtIconified = false
-                            DesktopGpuManager.onRestored(window)
+                            if (isWindowActiveOrFocused(window)) {
+                                triggerWakeup()
+                            }
                         }
 
                         override fun windowActivated(e: WindowEvent) {
-                            if (!windowState.isMinimized && isVisible) {
-                                isAwtIconified = false
-                                DesktopGpuManager.onRestored(window)
-                            }
+                            triggerWakeup()
+                        }
+
+                        override fun windowDeactivated(e: WindowEvent) {
+                            scheduleSleep()
+                        }
+
+                        override fun windowGainedFocus(e: WindowEvent) {
+                            desktopNotificationManager.refreshPermission()
+                            triggerWakeup()
+                        }
+
+                        override fun windowLostFocus(e: WindowEvent) {
+                            scheduleSleep()
                         }
                     }
                 window.addWindowListener(windowListener)
+                window.addWindowFocusListener(windowListener)
 
                 val componentListener =
                     object : ComponentAdapter() {
@@ -433,8 +484,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         }
 
                         override fun componentShown(e: ComponentEvent) {
-                            if (!windowState.isMinimized && isVisible) {
-                                DesktopGpuManager.onRestored(window)
+                            if (isWindowActiveOrFocused(window)) {
+                                triggerWakeup()
                             }
                         }
                     }
@@ -443,35 +494,29 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 val statePollTimer =
                     Timer(500) {
                         val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
-                        if (isIconic && !DesktopGpuManager.isMinimized) {
-                            isAwtIconified = true
-                            DesktopGpuManager.onMinimized(window)
-                        } else if (!isIconic && DesktopGpuManager.isMinimized) {
-                            isAwtIconified = false
-                            DesktopGpuManager.onRestored(window)
+                        if (isIconic) {
+                            if (!isAwtIconified) isAwtIconified = true
+                            if (!DesktopGpuManager.isMinimized) DesktopGpuManager.onMinimized(window)
+                        } else {
+                            if (isAwtIconified) isAwtIconified = false
+                            val active = isWindowActiveOrFocused(window)
+                            if (!active && !isAwtBackgrounded) {
+                                isAwtBackgrounded = true
+                                DesktopGpuManager.onMinimized(window)
+                            } else if (active && (isAwtBackgrounded || DesktopGpuManager.isMinimized)) {
+                                triggerWakeup()
+                            }
                         }
                     }.apply { start() }
 
                 onDispose {
+                    deactivationTimer?.stop()
                     statePollTimer.stop()
                     window.removeWindowStateListener(stateListener)
                     window.removeWindowListener(windowListener)
+                    window.removeWindowFocusListener(windowListener)
                     window.removeComponentListener(componentListener)
                     DesktopGpuManager.detach()
-                }
-            }
-            // Returning from macOS System Settings is the only reliable time to learn whether the
-            // user enabled notifications after denying the one-shot system prompt.
-            DisposableEffect(window) {
-                val listener =
-                    object : WindowAdapter() {
-                        override fun windowGainedFocus(event: WindowEvent) {
-                            desktopNotificationManager.refreshPermission()
-                        }
-                    }
-                window.addWindowFocusListener(listener)
-                onDispose {
-                    window.removeWindowFocusListener(listener)
                 }
             }
             // AWT on GNOME/XWayland (CMP-9528): moving the window to another monitor puts the

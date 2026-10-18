@@ -74,7 +74,7 @@ object DesktopGpuManager {
     fun onMinimized(window: Window) {
         if (isMinimized) return
         isMinimized = true
-        Logger.i(TAG, "Desktop window minimized: pausing GPU rendering and freeing VRAM")
+        Logger.i(TAG, "Desktop window minimized/backgrounded: pausing GPU rendering and freeing VRAM")
 
         // 1. Hide the content pane, all SkiaLayers and Canvases so Skiko's Redrawer stops completely
         runCatching {
@@ -118,7 +118,7 @@ object DesktopGpuManager {
     fun onRestored(window: Window) {
         if (!isMinimized) return
         isMinimized = false
-        Logger.i(TAG, "Desktop window restored: resuming GPU rendering")
+        Logger.i(TAG, "Desktop window restored/foregrounded: resuming GPU rendering")
 
         // 1. Restore visibility and trigger repaint
         runCatching {
