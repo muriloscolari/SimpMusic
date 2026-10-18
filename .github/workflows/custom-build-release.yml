@@ -141,12 +141,29 @@ jobs:
           SHORT_SHA: ${{ steps.prepare_assets.outputs.short_sha }}
         run: |
           TAG="custom-v${VERSION}-${SHORT_SHA}"
-          TITLE="SimpMusic v${VERSION} (${SHORT_SHA})"
+          COMMIT_SUBJECT=$(git log -1 --format="%s")
+          COMMIT_BODY=$(git log -1 --format="%b")
+          TITLE="SimpMusic v${VERSION} (${SHORT_SHA}) - ${COMMIT_SUBJECT}"
 
           cat << EOF > release_notes.md
-          Automated build for branch **custom** at commit \`${SHORT_SHA}\`.
+          Automated build for branch **custom** at commit [\`${SHORT_SHA}\`](https://github.com/${{ github.repository }}/commit/${SHORT_SHA}).
 
-          ### Arquivos incluídos:
+          ### 📝 Mensagem do Commit:
+          **${COMMIT_SUBJECT}**
+
+          EOF
+
+          if [ -n "$COMMIT_BODY" ]; then
+            cat << EOF >> release_notes.md
+          \`\`\`
+          ${COMMIT_BODY}
+          \`\`\`
+
+          EOF
+          fi
+
+          cat << EOF >> release_notes.md
+          ### 📦 Arquivos incluídos:
           - **Android (ARM64)**: \`SimpMusic-v${VERSION}-arm64-v8a.apk\` (recomendado para celulares modernos)
           - **Android (Universal)**: \`SimpMusic-v${VERSION}-universal.apk\` (compatível com qualquer arquitetura)
           - **Linux (AppImage)**: \`SimpMusic-v${VERSION}-Linux-x86_64.AppImage\` (executável direto no Linux)
