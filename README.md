@@ -91,6 +91,9 @@ Baixe os binários da versão mais recente na nossa página de **[Releases](http
 | **Linux** | `SimpMusic-v*-Linux-x86_64.AppImage` | Executável único compatível com qualquer distribuição Linux. |
 | **Windows** | `SimpMusic-v*-Windows-x64-installer.zip` | Instalador offline com script automatizado para Windows 10/11. |
 
+> [!WARNING]
+> **Não é possível instalar por cima do SimpMusic oficial.** Esta é uma build assinada com **chave de debug** e mantém o mesmo `applicationId` (`com.maxrave.simpmusic`) do app original — o Android vai recusar a instalação (`App not installed` / `App não instalada`) por incompatibilidade de assinatura. **Desinstale a versão oficial antes de instalar esta** (o mesmo vale ao voltar para o oficial depois). Se quiser preservar seus dados, faça um backup antes.
+
 ---
 
 ## ✨ Recursos Herdados da Base
@@ -126,6 +129,16 @@ conveyor --agree-to-license=1 -Kapp.machines=linux.amd64.glibc make --overwrite=
 # Executar a versão Desktop em modo desenvolvimento
 ./gradlew :desktopApp:run
 ```
+
+---
+
+## ⚖️ Disclaimer Legal e Termos de Uso
+
+- **Fork não oficial:** este projeto **não é afiliado, endossado nem suportado** pelo [SimpMusic original](https://github.com/maxrave-dev/SimpMusic) nem por seus desenvolvedores.
+- **Não relate problemas deste fork no projeto original.** Use as [Issues deste repositório](https://github.com/muriloscolari/SimpMusic/issues) para reportar bugs e enviar sugestões.
+- **Fornecido "COMO ESTÁ" (AS IS):** sem garantia de qualquer tipo, expressa ou implícita. Os autores não se responsabilizam por qualquer dano, perda de dados ou prejuízo decorrente do uso deste software.
+- **Sem incentivo à pirataria:** este projeto não apoia nem incentiva a pirataria. Os usuários são os **únicos responsáveis** por garantir que o uso esteja em conformidade com as leis de direitos autorais do seu país e com os Termos de Serviço das plataformas acessadas.
+- **Código aberto (GPLv3):** o código-fonte completo das modificações está disponível neste repositório.
 
 ---
 
