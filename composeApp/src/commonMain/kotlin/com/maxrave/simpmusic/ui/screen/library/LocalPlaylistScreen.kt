@@ -51,6 +51,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import com.maxrave.simpmusic.extension.barBlurStyle
 import com.maxrave.simpmusic.ui.component.DownloadingIndicator
+import com.maxrave.simpmusic.ui.component.LocalWindowMinimized
 import com.maxrave.simpmusic.ui.icon.Search
 import com.maxrave.simpmusic.ui.icon.Close
 import androidx.compose.runtime.CompositionLocalProvider
@@ -1652,17 +1653,22 @@ fun LocalPlaylistScreen(
 private fun SuggestAiIcon() {
     val aiPainter = rememberVectorPainter(SimpIcons.TipsAndUpdates)
     val limit = 1.5f
-    val transition = rememberInfiniteTransition(label = "shimmer")
-    val progressAnimated by transition.animateFloat(
-        initialValue = -limit,
-        targetValue = limit,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(5000, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "shimmer",
-    )
+    val isWindowMinimized = LocalWindowMinimized.current
+    val progressAnimated by if (!isWindowMinimized) {
+        val transition = rememberInfiniteTransition(label = "shimmer")
+        transition.animateFloat(
+            initialValue = -limit,
+            targetValue = limit,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(5000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "shimmer",
+        )
+    } else {
+        remember { mutableStateOf(0f) }
+    }
     Box(
         modifier =
             Modifier

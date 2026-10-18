@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.maxrave.simpmusic.ui.component.LocalWindowMinimized
+
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
@@ -522,13 +524,18 @@ private fun ConnectionLine(
 
     // Connecting is the one state the user is waiting on, and a static dot is indistinguishable
     // from a stuck one.
-    val pulse = rememberInfiniteTransition(label = "ltConnecting")
-    val dotAlpha by pulse.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
-        label = "ltConnectingAlpha",
-    )
+    val isWindowMinimized = LocalWindowMinimized.current
+    val dotAlpha by if (!isWindowMinimized && connection is RoomConnection.Connecting) {
+        val pulse = rememberInfiniteTransition(label = "ltConnecting")
+        pulse.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.2f,
+            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+            label = "ltConnectingAlpha",
+        )
+    } else {
+        remember { mutableStateOf(1f) }
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),

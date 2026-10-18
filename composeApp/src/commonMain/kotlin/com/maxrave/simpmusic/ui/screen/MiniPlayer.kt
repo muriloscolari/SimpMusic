@@ -831,8 +831,9 @@ fun MiniPlayer(
                                 // rides `alpha = 1f - infoAlpha`, so it only exists while the
                                 // pointer is over the capsule — a crossfade cue nobody sees
                                 // unless they happen to be hovering is no cue at all.
+                                val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
                                 AnimatedVisibility(
-                                    visible = timelineState.isCrossfading,
+                                    visible = timelineState.isCrossfading && !isWindowMinimized,
                                     enter = fadeIn(),
                                     exit = fadeOut(),
                                 ) {

@@ -1004,7 +1004,8 @@ fun RichSyncLyricsLineItem(
     wrappedLineSpacing: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
-    val playhead = rememberSmoothPlayhead(currentTimeMs, enabled = isCurrent)
+    val isWindowMinimized = LocalWindowMinimized.current
+    val playhead = rememberSmoothPlayhead(currentTimeMs, enabled = isCurrent && !isWindowMinimized)
     val originalWords = remember(parsedLine.words) { parsedLine.words.joinToString(" ") { it.text } }
     val lineDirection = rememberLyricLayoutDirection(originalWords)
 

@@ -2072,10 +2072,11 @@ internal fun ColumnScope.SpotifyPlaybackControls(
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Left,
         )
+        val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
         AnimatedVisibility(
             enter = fadeIn(),
             exit = fadeOut(),
-            visible = state.timelineState.isCrossfading,
+            visible = state.timelineState.isCrossfading && !isWindowMinimized,
         ) {
             val sweepTransition = rememberInfiniteTransition(label = "nowPlayingCrossfadeSweep")
             val crossfadeSweep by sweepTransition.animateFloat(

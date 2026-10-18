@@ -63,8 +63,9 @@ fun AudioPlayingIndicator(
     color: Color = AudioIndicatorCyan,
 ) {
     val isNowPlayingOpen = LocalNowPlayingOpen.current
+    val isWindowMinimized = LocalWindowMinimized.current
     val phase =
-        if (!isNowPlayingOpen) {
+        if (!isNowPlayingOpen && !isWindowMinimized) {
             val transition = rememberInfiniteTransition(label = "audioPlaying")
             val animatedPhase by transition.animateFloat(
                 initialValue = 0f,

@@ -129,6 +129,9 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     System.setProperty("compose.interop.blending", "true")
     System.setProperty("compose.layers.type", "COMPONENT")
 
+    // Cap Skiko's Skia GPU resource cache to 48MB instead of default 256MB-512MB
+    System.setProperty("skiko.gpu.resourceCacheLimit", "48M")
+
     // Skiko's vsync wait can park the EDT forever after a display change:
     // macOS waits on a CVDisplayLink-signalled NSConditionLock with no timeout
     // (DisplayLinkThrottler.mm), Linux blocks inside the vsync'd glXSwapBuffers
@@ -372,6 +375,44 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             state = windowState,
             visible = isVisible,
         ) {
+            var isAwtIconified by remember { mutableStateOf(false) }
+            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified
+
+            LaunchedEffect(isWindowMinimized) {
+                if (isWindowMinimized) {
+                    DesktopGpuManager.onMinimized(window)
+                } else {
+                    DesktopGpuManager.onRestored(window)
+                }
+            }
+
+            DisposableEffect(window) {
+                DesktopGpuManager.attach(window)
+                val windowListener =
+                    object : WindowAdapter() {
+                        override fun windowIconified(e: WindowEvent) {
+                            isAwtIconified = true
+                            DesktopGpuManager.onMinimized(window)
+                        }
+
+                        override fun windowDeiconified(e: WindowEvent) {
+                            isAwtIconified = false
+                            DesktopGpuManager.onRestored(window)
+                        }
+
+                        override fun windowActivated(e: WindowEvent) {
+                            if (!windowState.isMinimized && isVisible) {
+                                isAwtIconified = false
+                                DesktopGpuManager.onRestored(window)
+                            }
+                        }
+                    }
+                window.addWindowListener(windowListener)
+                onDispose {
+                    window.removeWindowListener(windowListener)
+                    DesktopGpuManager.detach()
+                }
+            }
             // Returning from macOS System Settings is the only reliable time to learn whether the
             // user enabled notifications after denying the one-shot system prompt.
             DisposableEffect(window) {
@@ -486,6 +527,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                                         },
                                     ),
                                 )
+                            }.memoryCache {
+                                coil3.memory.MemoryCache.Builder()
+                                    .maxSizePercent(context, 0.08)
+                                    .maxSizeBytes(24L * 1024 * 1024)
+                                    .build()
                             }.diskCachePolicy(CachePolicy.ENABLED)
                             .networkCachePolicy(CachePolicy.ENABLED)
                             .diskCache(
@@ -499,16 +545,21 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                             // so a square holder over a wide banner leaves the banner zoomed after the fade.
                             .preferEndFirstIntrinsicSize(true)
                             .build()
+                    DesktopGpuManager.registerImageLoader(imageLoader)
                     imageLoader
                 }
-                App(
-                    showDesktopNotificationPermissionDialog = showNotificationPermissionDialog,
-                    onDismissDesktopNotificationPermissionDialog =
-                        desktopNotificationManager::dismissPermissionDialog,
-                    onOpenDesktopNotificationSettings =
-                        desktopNotificationManager::openNotificationSettings,
-                )
-                ToastHost()
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.maxrave.simpmusic.ui.component.LocalWindowMinimized provides isWindowMinimized,
+                ) {
+                    App(
+                        showDesktopNotificationPermissionDialog = showNotificationPermissionDialog,
+                        onDismissDesktopNotificationPermissionDialog =
+                            desktopNotificationManager::dismissPermissionDialog,
+                        onOpenDesktopNotificationSettings =
+                            desktopNotificationManager::openNotificationSettings,
+                    )
+                    ToastHost()
+                }
             }
         }
 

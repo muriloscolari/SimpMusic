@@ -495,8 +495,9 @@ fun NowPlayingScreenContent(
     }
 
     // Crossfade: RGB rainbow color cycling when transitioning between tracks
+    val isWindowMinimized = com.maxrave.simpmusic.ui.component.LocalWindowMinimized.current
     val rainbowColor =
-        if (timelineState.isCrossfading) {
+        if (timelineState.isCrossfading && !isWindowMinimized) {
             val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
             val rainbowHue by infiniteTransition.animateFloat(
                 initialValue = 0f,

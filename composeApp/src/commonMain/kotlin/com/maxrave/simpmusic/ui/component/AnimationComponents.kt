@@ -55,14 +55,16 @@ fun InfiniteBorderAnimationView(
     content: @Composable () -> Unit,
 ) {
     val isNowPlayingOpen = LocalNowPlayingOpen.current
-    val visibility = updateTransition(isAnimated && !isNowPlayingOpen, label = "Border visibility")
+    val isWindowMinimized = LocalWindowMinimized.current
+    val isAnimationPaused = isNowPlayingOpen || isWindowMinimized
+    val visibility = updateTransition(isAnimated && !isAnimationPaused, label = "Border visibility")
     val borderScale = visibility.animateFloat(
         transitionSpec = { tween(800) },
         label = "Border scale",
     ) { visible -> if (visible) 1f else 0f }
     // Keep the exit animation, then remove both the frame loop and its offscreen layer.
     val animatedBorder =
-        if ((visibility.currentState || visibility.targetState) && !isNowPlayingOpen) {
+        if ((visibility.currentState || visibility.targetState) && !isAnimationPaused) {
             val infiniteTransition = rememberInfiniteTransition(label = "Infinite Color Animation")
             val degrees = infiniteTransition.animateFloat(
                 initialValue = 90f,
@@ -133,8 +135,10 @@ fun LimitedBorderAnimationView(
         mutableStateOf(false)
     }
     val isNowPlayingOpen = LocalNowPlayingOpen.current
+    val isWindowMinimized = LocalWindowMinimized.current
+    val isAnimationPaused = isNowPlayingOpen || isWindowMinimized
     val scaleAnimationValue by animateFloatAsState(
-        if (shouldAnimate && !isNowPlayingOpen) 1f else 0f,
+        if (shouldAnimate && !isAnimationPaused) 1f else 0f,
         tween(800),
     )
 
@@ -147,7 +151,7 @@ fun LimitedBorderAnimationView(
     }
 
     val degrees =
-        if (isAnimated && scaleAnimationValue > 0f && !isNowPlayingOpen) {
+        if (isAnimated && scaleAnimationValue > 0f && !isAnimationPaused) {
             val infiniteTransition = rememberInfiniteTransition(label = "Infinite Color Animation")
             val animDegrees by infiniteTransition.animateFloat(
                 initialValue = 0f,
