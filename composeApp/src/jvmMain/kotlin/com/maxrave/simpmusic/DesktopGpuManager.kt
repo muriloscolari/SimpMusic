@@ -5,9 +5,11 @@ import com.maxrave.logger.Logger
 import org.jetbrains.skia.DirectContext
 import org.jetbrains.skiko.SkiaLayer
 import java.awt.Canvas
+import java.awt.Component
 import java.awt.Container
 import java.awt.Window
 import java.lang.ref.WeakReference
+import javax.swing.JFrame
 
 /**
  * Manages desktop GPU resources, VRAM allocations and frame rendering lifecycle.
@@ -72,11 +74,17 @@ object DesktopGpuManager {
     fun onMinimized(window: Window) {
         if (isMinimized) return
         isMinimized = true
-        Logger.d(TAG, "Desktop window minimized: pausing GPU rendering and freeing VRAM")
+        Logger.i(TAG, "Desktop window minimized: pausing GPU rendering and freeing VRAM")
 
-        // 1. Hide the AWT Canvas so Skiko's Redrawer stops dispatching frame renders to GPU
+        // 1. Hide the content pane, all SkiaLayers and Canvases so Skiko's Redrawer stops completely
         runCatching {
-            findCanvas(window)?.let { canvas ->
+            if (window is JFrame) {
+                window.contentPane.isVisible = false
+            }
+            findSkiaLayers(window).forEach { layer ->
+                layer.isVisible = false
+            }
+            findCanvases(window).forEach { canvas ->
                 canvas.isVisible = false
             }
         }
@@ -88,7 +96,7 @@ object DesktopGpuManager {
                 ctx.resourceCacheLimit = MINIMIZED_CACHE_BYTES
                 ctx.resetAll()
                 ctx.submit(true)
-                Logger.d(TAG, "Purged Skia GPU resource cache in VRAM")
+                Logger.i(TAG, "Purged Skia GPU resource cache in VRAM")
             }
         }
 
@@ -110,11 +118,18 @@ object DesktopGpuManager {
     fun onRestored(window: Window) {
         if (!isMinimized) return
         isMinimized = false
-        Logger.d(TAG, "Desktop window restored: resuming GPU rendering")
+        Logger.i(TAG, "Desktop window restored: resuming GPU rendering")
 
-        // 1. Restore AWT Canvas visibility
+        // 1. Restore visibility and trigger repaint
         runCatching {
-            findCanvas(window)?.let { canvas ->
+            if (window is JFrame) {
+                window.contentPane.isVisible = true
+            }
+            findSkiaLayers(window).forEach { layer ->
+                layer.isVisible = true
+                layer.repaint()
+            }
+            findCanvases(window).forEach { canvas ->
                 canvas.isVisible = true
                 canvas.repaint()
             }
@@ -134,50 +149,76 @@ object DesktopGpuManager {
         }
     }
 
-    private fun findCanvas(container: Container): Canvas? {
-        return container.components.firstNotNullOfOrNull {
-            if (it is Canvas) it else (it as? Container)?.let { sub -> findCanvas(sub) }
+    private fun findAllComponents(container: Container): List<Component> {
+        val list = mutableListOf<Component>()
+        for (comp in container.components) {
+            list.add(comp)
+            if (comp is Container) {
+                list.addAll(findAllComponents(comp))
+            }
         }
+        return list
+    }
+
+    private fun findSkiaLayers(window: Window): List<Component> {
+        val all = if (window is JFrame) {
+            listOf(window.contentPane) + findAllComponents(window.contentPane)
+        } else {
+            findAllComponents(window)
+        }
+        return all.filter { it is SkiaLayer || it.javaClass.name.contains("SkiaLayer") }
+    }
+
+    private fun findCanvases(window: Window): List<Canvas> {
+        val all = if (window is JFrame) {
+            listOf(window.contentPane) + findAllComponents(window.contentPane)
+        } else {
+            findAllComponents(window)
+        }
+        return all.filterIsInstance<Canvas>()
     }
 
     private fun getDirectContext(window: Window): DirectContext? {
         return runCatching {
-            val canvas = findCanvas(window) ?: return null
-            val skiaLayer = canvas.parent as? SkiaLayer ?: return null
-
-            // Find redrawer field in SkiaLayer
-            val redrawerField = skiaLayer.javaClass.declaredFields.firstOrNull {
-                it.name == "redrawer" || it.name.startsWith("redrawer$")
-            }?.apply { isAccessible = true }
-            val redrawer = redrawerField?.get(skiaLayer) ?: return null
-
-            // Find contextHandler in redrawer hierarchy
-            var currClass: Class<*>? = redrawer.javaClass
-            var contextHandler: Any? = null
-            while (currClass != null && contextHandler == null) {
-                val field = currClass.declaredFields.firstOrNull {
-                    it.name == "contextHandler" || it.type.name.contains("ContextHandler")
+            val layers = findSkiaLayers(window)
+            for (skiaLayer in layers) {
+                // Find redrawer field in SkiaLayer
+                val redrawerField = skiaLayer.javaClass.declaredFields.firstOrNull {
+                    it.name == "redrawer" || it.name.startsWith("redrawer$")
                 }?.apply { isAccessible = true }
-                if (field != null) {
-                    contextHandler = field.get(redrawer)
-                }
-                currClass = currClass.superclass
-            }
-            if (contextHandler == null) return null
+                val redrawer = redrawerField?.get(skiaLayer) ?: continue
 
-            // Find context in ContextHandler
-            var chClass: Class<*>? = contextHandler.javaClass
-            var directContext: DirectContext? = null
-            while (chClass != null && directContext == null) {
-                val field = chClass.declaredFields.firstOrNull {
-                    it.name == "context" && DirectContext::class.java.isAssignableFrom(it.type)
-                }?.apply { isAccessible = true }
-                if (field != null) {
-                    directContext = field.get(contextHandler) as? DirectContext
+                // Find contextHandler in redrawer hierarchy
+                var currClass: Class<*>? = redrawer.javaClass
+                var contextHandler: Any? = null
+                while (currClass != null && contextHandler == null) {
+                    val field = currClass.declaredFields.firstOrNull {
+                        it.name == "contextHandler" || it.type.name.contains("ContextHandler")
+                    }?.apply { isAccessible = true }
+                    if (field != null) {
+                        contextHandler = field.get(redrawer)
+                    }
+                    currClass = currClass.superclass
                 }
-                chClass = chClass.superclass
+                if (contextHandler == null) continue
+
+                // Find context in ContextHandler
+                var chClass: Class<*>? = contextHandler.javaClass
+                var directContext: DirectContext? = null
+                while (chClass != null && directContext == null) {
+                    val field = chClass.declaredFields.firstOrNull {
+                        it.name == "context" && DirectContext::class.java.isAssignableFrom(it.type)
+                    }?.apply { isAccessible = true }
+                    if (field != null) {
+                        directContext = field.get(contextHandler) as? DirectContext
+                    }
+                    chClass = chClass.superclass
+                }
+                if (directContext != null) {
+                    return directContext
+                }
             }
-            directContext
+            null
         }.onFailure {
             Logger.w(TAG, "Failed to resolve DirectContext: ${it.message}")
         }.getOrNull()

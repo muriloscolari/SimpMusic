@@ -82,10 +82,12 @@ import simpmusic.composeapp.generated.resources.quit_app
 import simpmusic.composeapp.generated.resources.time_out_check_internet_connection_or_change_piped_instance_in_settings
 import java.awt.Canvas
 import java.awt.Container
+import java.awt.Frame
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.awt.event.WindowStateListener
 import java.io.File
 import java.security.MessageDigest
 import javax.swing.Timer
@@ -388,6 +390,21 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
 
             DisposableEffect(window) {
                 DesktopGpuManager.attach(window)
+
+                val stateListener = WindowStateListener { e ->
+                    val isIconified = (e.newState and Frame.ICONIFIED) != 0
+                    val wasIconified = (e.oldState and Frame.ICONIFIED) != 0
+                    if (isIconified != wasIconified) {
+                        isAwtIconified = isIconified
+                        if (isIconified) {
+                            DesktopGpuManager.onMinimized(window)
+                        } else {
+                            DesktopGpuManager.onRestored(window)
+                        }
+                    }
+                }
+                window.addWindowStateListener(stateListener)
+
                 val windowListener =
                     object : WindowAdapter() {
                         override fun windowIconified(e: WindowEvent) {
@@ -408,8 +425,25 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         }
                     }
                 window.addWindowListener(windowListener)
+
+                val componentListener =
+                    object : ComponentAdapter() {
+                        override fun componentHidden(e: ComponentEvent) {
+                            DesktopGpuManager.onMinimized(window)
+                        }
+
+                        override fun componentShown(e: ComponentEvent) {
+                            if (!windowState.isMinimized && isVisible) {
+                                DesktopGpuManager.onRestored(window)
+                            }
+                        }
+                    }
+                window.addComponentListener(componentListener)
+
                 onDispose {
+                    window.removeWindowStateListener(stateListener)
                     window.removeWindowListener(windowListener)
+                    window.removeComponentListener(componentListener)
                     DesktopGpuManager.detach()
                 }
             }
