@@ -86,6 +86,8 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -1021,7 +1023,29 @@ fun MiniPlayer(
                     val isVolumeHovered by volumeInteraction.collectIsHoveredAsState()
                     val popupInteraction = remember { MutableInteractionSource() }
                     val isPopupHovered by popupInteraction.collectIsHoveredAsState()
-                    Box(modifier = Modifier.hoverable(volumeInteraction)) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .hoverable(volumeInteraction)
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            if (event.type == PointerEventType.Scroll) {
+                                                val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                                if (scrollDelta != 0f) {
+                                                    // Scrolling up (negative delta) increases volume, scrolling down decreases volume
+                                                    val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                                    val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                                    volumeValue = newVol
+                                                    sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVol))
+                                                    event.changes.forEach { it.consume() }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                    ) {
                         IconButton(
                             onClick = {
                                 // Toggle mute/unmute
@@ -1109,6 +1133,9 @@ fun MiniPlayer(
                                                     onValueChange = {
                                                         isVolumeSliding = true
                                                         volumeValue = it
+                                                        sharedViewModel.onUIEvent(
+                                                            UIEvent.UpdateVolume(it.coerceIn(0f, 1f)),
+                                                        )
                                                     },
                                                     valueRange = 0f..1f,
                                                     modifier =

@@ -68,6 +68,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -1046,7 +1049,24 @@ private fun FullscreenLyricsDesktopChrome(
                     // Static glass: the press swell scales the whole pill, which would slide the
                     // slider out from under a pointer that is dragging it.
                     .liquidGlass(backdrop, RoundedCornerShape(24.dp), interactive = false)
-                    .padding(end = 16.dp),
+                    .padding(end = 16.dp)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.type == PointerEventType.Scroll) {
+                                    val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                    if (scrollDelta != 0f) {
+                                        val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                        val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                        volumeValue = newVol
+                                        sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVol))
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+                        }
+                    },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
@@ -1084,6 +1104,9 @@ private fun FullscreenLyricsDesktopChrome(
                     onValueChange = {
                         isVolumeSliding = true
                         volumeValue = it
+                        sharedViewModel.onUIEvent(
+                            UIEvent.UpdateVolume(it.coerceIn(0f, 1f)),
+                        )
                     },
                     valueRange = 0f..1f,
                     modifier = Modifier.width(CHROME_VOLUME_SLIDER_WIDTH),

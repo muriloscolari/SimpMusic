@@ -51,6 +51,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -380,7 +382,25 @@ fun MediumMiniLayout(
                                         val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                                         onUIEvent(UIEvent.UpdateVolume(newVolume))
                                     },
-                                    modifier = Modifier.size(28.dp),
+                                    modifier =
+                                        Modifier
+                                            .size(28.dp)
+                                            .pointerInput(Unit) {
+                                                awaitPointerEventScope {
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                                        if (event.type == PointerEventType.Scroll) {
+                                                            val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                                            if (scrollDelta != 0f) {
+                                                                val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                                                val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                                                onUIEvent(UIEvent.UpdateVolume(newVol))
+                                                                event.changes.forEach { it.consume() }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
                                 ) {
                                     Icon(
                                         imageVector =
@@ -686,7 +706,25 @@ fun SquareMiniLayout(
                             val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                             onUIEvent(UIEvent.UpdateVolume(newVolume))
                         },
-                        modifier = Modifier.size(32.dp),
+                        modifier =
+                            Modifier
+                                .size(32.dp)
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            if (event.type == PointerEventType.Scroll) {
+                                                val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                                if (scrollDelta != 0f) {
+                                                    val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                                    val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                                    onUIEvent(UIEvent.UpdateVolume(newVol))
+                                                    event.changes.forEach { it.consume() }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
                     ) {
                         Icon(
                             imageVector =
@@ -886,7 +924,25 @@ fun ExpandedMiniLayout(
                                     val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                                     onUIEvent(UIEvent.UpdateVolume(newVolume))
                                 },
-                                modifier = Modifier.size(28.dp),
+                                modifier =
+                                    Modifier
+                                        .size(28.dp)
+                                        .pointerInput(Unit) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                                    if (event.type == PointerEventType.Scroll) {
+                                                        val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                                        if (scrollDelta != 0f) {
+                                                            val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                                            val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                                            onUIEvent(UIEvent.UpdateVolume(newVol))
+                                                            event.changes.forEach { it.consume() }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
                             ) {
                                 Icon(
                                     imageVector =
