@@ -505,7 +505,9 @@
     <string name="log_in_to_discord">Faça login no Discord</string>
     <string name="intro_login_to_discord">Faça login para ativar o Rich Presence do Discord</string>
     <string name="enable_rich_presence">Ativar rich presence</string>
-    <string name="rich_presence_info"></string>
+    <string name="rich_presence_info">Exibe a música em reprodução no seu perfil do Discord Desktop</string>
+    <string name="discord_status_connected">Conectado ao Discord Desktop</string>
+    <string name="discord_status_waiting">Aguardando o Discord ser iniciado...</string>
     <string name="youtube_liked_music">Músicas curtidas do YouTube</string>
     <string name="keep_your_youtube_playlist_offline">Continuar mostrando sua lista de reprodução do YouTube quando estiver offline</string>
     <string name="keep_your_youtube_playlist_offline_description">Salvar sua lista de reprodução YT no local e manter para mostrar quando estiver offline</string>

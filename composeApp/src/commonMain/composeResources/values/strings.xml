@@ -650,6 +650,8 @@
     <string name="intro_login_to_discord">Log in to enable Discord Rich Presence</string>
     <string name="enable_rich_presence">Enable rich presence</string>
     <string name="rich_presence_info">Show media session info on your Discord profile</string>
+    <string name="discord_status_connected">Connected to Discord Desktop</string>
+    <string name="discord_status_waiting">Waiting for Discord to start...</string>
     <string name="log_out_from_discord">Log out from Discord</string>
     <string name="lastfm_integration">Last.fm</string>
     <string name="log_in_to_lastfm">Log in to Last.fm</string>

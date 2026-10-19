@@ -16,6 +16,7 @@ import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.data.player.ReverbPreset
 import com.maxrave.domain.extension.toNetScapeString
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.mediaservice.handler.DiscordConnectionStatus
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
 import com.maxrave.domain.repository.AccountRepository
 import com.maxrave.domain.repository.ArtistRepository
@@ -203,6 +204,9 @@ class SettingsViewModel(
 
     private val _richPresenceEnabled = MutableStateFlow(false)
     val richPresenceEnabled: StateFlow<Boolean> = _richPresenceEnabled
+
+    val discordConnectionStatus: StateFlow<DiscordConnectionStatus>
+        get() = mediaPlayerHandler.discordConnectionStatus
 
     private val _startWithSystem = MutableStateFlow(false)
     val startWithSystem: StateFlow<Boolean> = _startWithSystem

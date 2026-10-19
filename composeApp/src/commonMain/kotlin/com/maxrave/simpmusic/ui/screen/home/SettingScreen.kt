@@ -137,9 +137,9 @@ import com.maxrave.simpmusic.ui.icon.Error
 import com.maxrave.simpmusic.ui.icon.PeopleAlt
 import com.maxrave.simpmusic.ui.icon.PlaylistAdd
 import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.domain.mediaservice.handler.DiscordConnectionStatus
 import com.maxrave.simpmusic.ui.navigation.destination.home.AppLogDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.CreditDestination
-import com.maxrave.simpmusic.ui.navigation.destination.login.DiscordLoginDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.LastfmLoginDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.LoginDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.SpotifyLoginDestination
@@ -402,6 +402,8 @@ import simpmusic.composeapp.generated.resources.requires_android_12
 import simpmusic.composeapp.generated.resources.restore_your_data
 import simpmusic.composeapp.generated.resources.restore_your_saved_data
 import simpmusic.composeapp.generated.resources.rich_presence_info
+import simpmusic.composeapp.generated.resources.discord_status_connected
+import simpmusic.composeapp.generated.resources.discord_status_waiting
 import simpmusic.composeapp.generated.resources.save
 import simpmusic.composeapp.generated.resources.save_all_your_playlist_data
 import simpmusic.composeapp.generated.resources.save_playback_state
@@ -618,6 +620,7 @@ fun SettingScreen(
     val lastfmCustomSecret by viewModel.lastfmCustomSecret.collectAsStateWithLifecycle()
     var showLastfmCredentialsDialog by rememberSaveable { mutableStateOf(false) }
     val richPresenceEnabled by viewModel.richPresenceEnabled.collectAsStateWithLifecycle()
+    val discordConnectionStatus by viewModel.discordConnectionStatus.collectAsStateWithLifecycle()
 
     val crossfadeEnabled by viewModel.crossfadeEnabled.collectAsStateWithLifecycle()
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsStateWithLifecycle()
@@ -2175,39 +2178,29 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "discord") {
-            SettingGroup(title = stringResource(Res.string.discord_integration)) {
-                SettingItem(
-                    title =
-                        if (discordLoggedIn) {
-                            stringResource(Res.string.log_out_from_discord)
+        if (getPlatform() != Platform.Android) {
+            item(key = "discord") {
+                SettingGroup(title = stringResource(Res.string.discord_integration)) {
+                    val statusText =
+                        if (!richPresenceEnabled) {
+                            stringResource(Res.string.rich_presence_info)
                         } else {
-                            stringResource(Res.string.log_in_to_discord)
-                        },
-                    subtitle =
-                        if (discordLoggedIn) {
-                            stringResource(Res.string.logged_in)
-                        } else {
-                            stringResource(Res.string.intro_login_to_discord)
-                        },
-                    onClick = {
-                        if (discordLoggedIn) {
-                            viewModel.confirmLogOut(
-                                confirmLabel = runBlocking { getString(Res.string.log_out_from_discord) },
-                            ) { viewModel.logOutDiscord() }
-                        } else {
-                            navController.navigate(DiscordLoginDestination)
+                            when (discordConnectionStatus) {
+                                DiscordConnectionStatus.CONNECTED -> stringResource(Res.string.discord_status_connected)
+                                DiscordConnectionStatus.CONNECTING,
+                                DiscordConnectionStatus.NOT_RUNNING -> stringResource(Res.string.discord_status_waiting)
+                                DiscordConnectionStatus.DISABLED -> stringResource(Res.string.rich_presence_info)
+                            }
                         }
-                    },
-                )
-                SettingItem(
-                    title = stringResource(Res.string.enable_rich_presence),
-                    subtitle = stringResource(Res.string.rich_presence_info),
-                    switch = (richPresenceEnabled to { viewModel.setDiscordRichPresenceEnabled(it) }),
-                    isEnable = discordLoggedIn,
-                )
+                    SettingItem(
+                        title = stringResource(Res.string.enable_rich_presence),
+                        subtitle = statusText,
+                        switch = (richPresenceEnabled to { viewModel.setDiscordRichPresenceEnabled(it) }),
+                    )
+                }
             }
         }
+
         item(key = "lastfm") {
             SettingGroup(title = stringResource(Res.string.lastfm_integration)) {
                 if (lastfmAvailable) {
