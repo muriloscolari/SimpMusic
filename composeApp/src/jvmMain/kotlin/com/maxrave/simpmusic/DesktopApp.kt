@@ -380,8 +380,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             visible = isVisible,
         ) {
             var isAwtIconified by remember { mutableStateOf(false) }
-            var isAwtBackgrounded by remember { mutableStateOf(false) }
-            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isAwtBackgrounded
+            var isOccluded by remember { mutableStateOf(false) }
+            val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isOccluded
 
             LaunchedEffect(isWindowMinimized) {
                 if (isWindowMinimized) {
@@ -394,21 +394,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             DisposableEffect(window) {
                 DesktopGpuManager.attach(window)
 
-                fun isWindowActiveOrFocused(w: Window): Boolean {
-                    if (w.isFocused || w.isActive) return true
-                    val kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
-                    if (kfm.activeWindow == w || kfm.focusedWindow == w) return true
-                    return runCatching {
-                        w.ownedWindows.any { it.isShowing && (it.isFocused || it.isActive || it == kfm.activeWindow || it == kfm.focusedWindow) }
-                    }.getOrDefault(false)
-                }
-
-                var deactivationTimer: Timer? = null
-
                 fun triggerWakeup() {
-                    deactivationTimer?.stop()
-                    deactivationTimer = null
-                    isAwtBackgrounded = false
+                    if (isOccluded) isOccluded = false
                     val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
                     if (!isIconic) {
                         isAwtIconified = false
@@ -416,18 +403,15 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     }
                 }
 
-                fun scheduleSleep() {
-                    deactivationTimer?.stop()
-                    deactivationTimer = Timer(200) {
-                        if (!isWindowActiveOrFocused(window)) {
-                            isAwtBackgrounded = true
-                            DesktopGpuManager.onMinimized(window)
-                        }
-                    }.apply {
-                        isRepeats = false
-                        start()
+                DesktopOcclusionManager.onOcclusionChanged = { occluded ->
+                    isOccluded = occluded
+                    if (occluded) {
+                        DesktopGpuManager.onMinimized(window)
+                    } else if (!windowState.isMinimized && !isAwtIconified && isVisible) {
+                        DesktopGpuManager.onRestored(window)
                     }
                 }
+                DesktopOcclusionManager.start()
 
                 val stateListener = WindowStateListener { e ->
                     val isIconified = (e.newState and Frame.ICONIFIED) != 0
@@ -436,7 +420,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         isAwtIconified = isIconified
                         if (isIconified) {
                             DesktopGpuManager.onMinimized(window)
-                        } else if (isWindowActiveOrFocused(window)) {
+                        } else if (!isOccluded) {
                             triggerWakeup()
                         }
                     }
@@ -452,7 +436,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
 
                         override fun windowDeiconified(e: WindowEvent) {
                             isAwtIconified = false
-                            if (isWindowActiveOrFocused(window)) {
+                            if (!isOccluded) {
                                 triggerWakeup()
                             }
                         }
@@ -461,17 +445,9 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                             triggerWakeup()
                         }
 
-                        override fun windowDeactivated(e: WindowEvent) {
-                            scheduleSleep()
-                        }
-
                         override fun windowGainedFocus(e: WindowEvent) {
                             desktopNotificationManager.refreshPermission()
                             triggerWakeup()
-                        }
-
-                        override fun windowLostFocus(e: WindowEvent) {
-                            scheduleSleep()
                         }
                     }
                 window.addWindowListener(windowListener)
@@ -484,7 +460,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         }
 
                         override fun componentShown(e: ComponentEvent) {
-                            if (isWindowActiveOrFocused(window)) {
+                            if (!isOccluded) {
                                 triggerWakeup()
                             }
                         }
@@ -499,18 +475,17 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                             if (!DesktopGpuManager.isMinimized) DesktopGpuManager.onMinimized(window)
                         } else {
                             if (isAwtIconified) isAwtIconified = false
-                            val active = isWindowActiveOrFocused(window)
-                            if (!active && !isAwtBackgrounded) {
-                                isAwtBackgrounded = true
+                            if (isOccluded && !DesktopGpuManager.isMinimized) {
                                 DesktopGpuManager.onMinimized(window)
-                            } else if (active && (isAwtBackgrounded || DesktopGpuManager.isMinimized)) {
+                            } else if (!isOccluded && DesktopGpuManager.isMinimized) {
                                 triggerWakeup()
                             }
                         }
                     }.apply { start() }
 
                 onDispose {
-                    deactivationTimer?.stop()
+                    DesktopOcclusionManager.onOcclusionChanged = null
+                    DesktopOcclusionManager.stop()
                     statePollTimer.stop()
                     window.removeWindowStateListener(stateListener)
                     window.removeWindowListener(windowListener)

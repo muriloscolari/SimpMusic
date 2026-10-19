@@ -73,6 +73,8 @@
 
 # Desktop GPU Manager & Memory Trimmer
 -keep class com.maxrave.simpmusic.DesktopGpuManager { *; }
+-keep class com.maxrave.simpmusic.DesktopOcclusionManager** { *; }
+-keep interface com.maxrave.simpmusic.DesktopOcclusionListener { *; }
 -keep class com.maxrave.simpmusic.ui.component.WindowMinimizationKt { *; }
 -keep class com.simpmusic.media_jvm.memory.** { *; }
 

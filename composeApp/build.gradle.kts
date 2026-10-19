@@ -200,6 +200,8 @@ kotlin {
             implementation(projects.mediaJvmUi)
             // Login sync QR code
             implementation(libs.zxing.core)
+            // DBus for Linux desktop window occlusion management
+            implementation("com.github.hypfvieh:dbus-java-core:5.0.0")
         }
     }
 }
