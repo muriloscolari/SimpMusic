@@ -12,6 +12,8 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -26,8 +28,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -142,6 +145,7 @@ import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -228,9 +232,6 @@ fun MiniPlayer(
         label = "",
     )
 
-    val offsetX = remember { Animatable(initialValue = 0f) }
-    val offsetY = remember { Animatable(0f) }
-
     var loading by rememberSaveable {
         mutableStateOf(true)
     }
@@ -271,6 +272,18 @@ fun MiniPlayer(
     }
 
     if (getPlatform() == Platform.Android) {
+        val density = LocalDensity.current
+        val swipeDistanceThreshold = with(density) { 36.dp.toPx() }
+        val swipeVelocityThreshold = with(density) { 300.dp.toPx() }
+        val closeThreshold = with(density) { 56.dp.toPx() }
+        val maxDragPx = with(density) { 180.dp.toPx() }
+
+        var dragOffsetX by remember { mutableFloatStateOf(0f) }
+        var horizontalAnimJob by remember { mutableStateOf<Job?>(null) }
+
+        var dragOffsetY by remember { mutableFloatStateOf(0f) }
+        var verticalAnimJob by remember { mutableStateOf<Job?>(null) }
+
         // One shape for both the Card and the clip below. They must not diverge: the clip wraps
         // the Card's own background draw, so the larger radius wins and silently becomes the
         // visible one.
@@ -303,38 +316,38 @@ fun MiniPlayer(
                     ).then(
                         Modifier
                             .clip(miniPlayerShape)
-                            .offset { IntOffset(0, offsetY.value.roundToInt()) }
+                            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
                             .clickable(
                                 onClick = onClick,
-                            ).pointerInput(Unit) {
-                                detectVerticalDragGestures(
-                                    onDragStart = {
-                                    },
-                                    onVerticalDrag = { change: PointerInputChange, dragAmount: Float ->
-                                        if (offsetY.value + dragAmount > 0) {
-                                            coroutineScope.launch {
-                                                change.consume()
-                                                offsetY.animateTo(offsetY.value + 2 * dragAmount)
-                                                Logger.w("MiniPlayer", "Dragged ${offsetY.value}")
-                                            }
+                            )
+                            .draggable(
+                                state = rememberDraggableState { delta ->
+                                    if (dragOffsetY + delta > 0f) {
+                                        dragOffsetY += delta
+                                    }
+                                },
+                                orientation = Orientation.Vertical,
+                                onDragStarted = {
+                                    verticalAnimJob?.cancel()
+                                },
+                                onDragStopped = { velocity ->
+                                    val currentOffsetY = dragOffsetY
+                                    if (currentOffsetY > closeThreshold || velocity > swipeVelocityThreshold) {
+                                        onClose()
+                                    }
+                                    verticalAnimJob = coroutineScope.launch {
+                                        Animatable(currentOffsetY).animateTo(
+                                            targetValue = 0f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        ) {
+                                            dragOffsetY = value
                                         }
-                                    },
-                                    onDragCancel = {
-                                        coroutineScope.launch {
-                                            offsetY.animateTo(0f)
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        Logger.w("MiniPlayer", "Drag Ended")
-                                        coroutineScope.launch {
-                                            if (offsetY.value > 70) {
-                                                onClose()
-                                            }
-                                            offsetY.animateTo(0f)
-                                        }
-                                    },
-                                )
-                            },
+                                    }
+                                },
+                            ),
                     ),
         ) {
             Box(modifier = Modifier.fillMaxHeight()) {
@@ -345,49 +358,47 @@ fun MiniPlayer(
                             .fillMaxSize(),
                 ) {
                     Spacer(modifier = Modifier.size(8.dp))
-                    Box(modifier = Modifier.weight(1F)) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1F)
+                                .fillMaxHeight(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
                         Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier =
                                 Modifier
-                                    .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                                    .pointerInput(Unit) {
-                                        detectHorizontalDragGestures(
-                                            onDragStart = {
-                                            },
-                                            onHorizontalDrag = {
-                                                change: PointerInputChange,
-                                                dragAmount: Float,
-                                                ->
-                                                coroutineScope.launch {
-                                                    change.consume()
-                                                    offsetX.animateTo(offsetX.value + dragAmount * 2)
-                                                    Logger.w("MiniPlayer", "Dragged ${offsetX.value}")
+                                    .fillMaxSize()
+                                    .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+                                    .draggable(
+                                        state = rememberDraggableState { delta ->
+                                            dragOffsetX = (dragOffsetX + delta).coerceIn(-maxDragPx, maxDragPx)
+                                        },
+                                        orientation = Orientation.Horizontal,
+                                        onDragStarted = {
+                                            horizontalAnimJob?.cancel()
+                                        },
+                                        onDragStopped = { velocity ->
+                                            val currentOffsetX = dragOffsetX
+                                            if (currentOffsetX > swipeDistanceThreshold || (currentOffsetX > 0 && velocity > swipeVelocityThreshold)) {
+                                                sharedViewModel.onUIEvent(UIEvent.Previous)
+                                            } else if (currentOffsetX < -swipeDistanceThreshold || (currentOffsetX < 0 && velocity < -swipeVelocityThreshold)) {
+                                                sharedViewModel.onUIEvent(UIEvent.Next)
+                                            }
+                                            horizontalAnimJob = coroutineScope.launch {
+                                                Animatable(currentOffsetX).animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMediumLow,
+                                                    ),
+                                                ) {
+                                                    dragOffsetX = value
                                                 }
-                                            },
-                                            onDragCancel = {
-                                                Logger.w("MiniPlayer", "Drag Cancelled")
-                                                coroutineScope.launch {
-                                                    if (offsetX.value > 200) {
-                                                        sharedViewModel.onUIEvent(UIEvent.Previous)
-                                                    } else if (offsetX.value < -120) {
-                                                        sharedViewModel.onUIEvent(UIEvent.Next)
-                                                    }
-                                                    offsetX.animateTo(0f)
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                Logger.w("MiniPlayer", "Drag Ended")
-                                                coroutineScope.launch {
-                                                    if (offsetX.value > 200) {
-                                                        sharedViewModel.onUIEvent(UIEvent.Previous)
-                                                    } else if (offsetX.value < -120) {
-                                                        sharedViewModel.onUIEvent(UIEvent.Next)
-                                                    }
-                                                    offsetX.animateTo(0f)
-                                                }
-                                            },
-                                        )
-                                    },
+                                            }
+                                        },
+                                    ),
                         ) {
                             Box(
                                 modifier =
