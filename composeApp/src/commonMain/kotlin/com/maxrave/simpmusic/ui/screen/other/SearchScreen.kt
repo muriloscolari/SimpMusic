@@ -323,18 +323,29 @@ fun SearchScreen(
             }
     }
 
-    //On search icon click while on search screen, open keyboard. Android only feature
-    if (getPlatform() == Platform.Android) {
-        val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
-        LaunchedEffect(reloadDestination) {
-            if (reloadDestination == SearchDestination::class) {
-                if (!selectionState.isActive && searchUIType == SearchUIType.EMPTY) {
+    // On search screen entered or search icon clicked, open keyboard and focus input (Desktop and Android)
+    LaunchedEffect(Unit) {
+        if (!selectionState.isActive && (searchUIType == SearchUIType.EMPTY || !isSearchSubmitted)) {
+            delay(200)
+            try {
+                isExpanded = true
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (_: Exception) {}
+        }
+    }
+
+    val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
+    LaunchedEffect(reloadDestination) {
+        if (reloadDestination == SearchDestination::class) {
+            if (!selectionState.isActive) {
+                try {
                     isExpanded = true
                     focusRequester.requestFocus()
                     keyboardController?.show()
-                }
-                sharedViewModel.reloadDestinationDone()
+                } catch (_: Exception) {}
             }
+            sharedViewModel.reloadDestinationDone()
         }
     }
 
@@ -1038,6 +1049,13 @@ fun SearchScreen(
                     onQueryChange = { newText ->
                         searchText = newText
                     },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .onFocusChanged {
+                                isFocused = it.isFocused
+                            },
                     onSearch = { query ->
                         // A pasted YouTube link is a destination, not a query. Translating it into
                         // the app's own deep link hands it to the same intent flow that handles
@@ -1141,10 +1159,7 @@ fun SearchScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onFocusChanged {
-                        isFocused = it.isFocused
-                    }.padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp),
             shape = RoundedCornerShape(8.dp),
             // See the note on SongSelectionTopAppBar above — the Column owns the status-bar inset.
             windowInsets = WindowInsets(0),
