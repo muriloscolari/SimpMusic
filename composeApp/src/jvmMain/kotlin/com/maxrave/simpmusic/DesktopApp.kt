@@ -300,13 +300,17 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         sharedViewModel.setIntent(intent)
     }
 
+    val shouldStartMinimized = args.contains("--minimized") || runBlocking {
+        dataStore.startMinimizedToTray.first() == DataStoreManager.TRUE
+    }
+
     application {
         // Main Window
         val windowState =
             rememberWindowState(
                 size = DpSize(1500.dp, 860.dp),
             )
-        var isVisible by remember { mutableStateOf(true) }
+        var isVisible by remember { mutableStateOf(!shouldStartMinimized) }
         val showNotificationPermissionDialog by
             desktopNotificationManager.shouldShowPermissionDialog.collectAsState()
         // The single-instance guard now runs before startKoin (top of

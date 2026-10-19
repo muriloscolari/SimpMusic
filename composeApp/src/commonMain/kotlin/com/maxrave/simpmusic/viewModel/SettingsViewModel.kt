@@ -28,6 +28,7 @@ import com.maxrave.logger.LogLevel
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.Platform
 import com.maxrave.simpmusic.expect.isOnUnmeteredNetwork
+import com.maxrave.simpmusic.expect.setDesktopAutostart
 import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Dispatchers
@@ -203,6 +204,12 @@ class SettingsViewModel(
     private val _richPresenceEnabled = MutableStateFlow(false)
     val richPresenceEnabled: StateFlow<Boolean> = _richPresenceEnabled
 
+    private val _startWithSystem = MutableStateFlow(false)
+    val startWithSystem: StateFlow<Boolean> = _startWithSystem
+
+    private val _startMinimizedToTray = MutableStateFlow(false)
+    val startMinimizedToTray: StateFlow<Boolean> = _startMinimizedToTray
+
     /**
      * False in a FOSS build, and in a full build with no API key in `local.properties`. The whole
      * Last.fm block in settings is hidden when it is false, rather than offering a login that
@@ -359,6 +366,8 @@ class SettingsViewModel(
         getAutoBackupFrequency()
         getAutoBackupMaxFiles()
         getAutoBackupLastTime()
+        getStartWithSystem()
+        getStartMinimizedToTray()
         viewModelScope.launch {
             calculateDataFraction(
                 cacheRepository,
@@ -544,6 +553,38 @@ class SettingsViewModel(
         viewModelScope.launch {
             dataStoreManager.autoDownloadLikedSongs.collect { enabled ->
                 _autoDownloadLikedSongs.value = enabled == DataStoreManager.TRUE
+            }
+        }
+    }
+
+    private fun getStartWithSystem() {
+        viewModelScope.launch {
+            dataStoreManager.startWithSystem.collect { enabled ->
+                _startWithSystem.value = enabled == DataStoreManager.TRUE
+            }
+        }
+    }
+
+    fun setStartWithSystem(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStoreManager.setStartWithSystem(enabled)
+            setDesktopAutostart(enabled, _startMinimizedToTray.value)
+        }
+    }
+
+    private fun getStartMinimizedToTray() {
+        viewModelScope.launch {
+            dataStoreManager.startMinimizedToTray.collect { enabled ->
+                _startMinimizedToTray.value = enabled == DataStoreManager.TRUE
+            }
+        }
+    }
+
+    fun setStartMinimizedToTray(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStoreManager.setStartMinimizedToTray(enabled)
+            if (_startWithSystem.value) {
+                setDesktopAutostart(true, enabled)
             }
         }
     }

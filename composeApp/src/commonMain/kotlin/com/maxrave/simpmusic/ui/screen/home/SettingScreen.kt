@@ -254,6 +254,8 @@ import simpmusic.composeapp.generated.resources.default_models
 import simpmusic.composeapp.generated.resources.description_and_licenses
 import simpmusic.composeapp.generated.resources.developer_blog
 import simpmusic.composeapp.generated.resources.developer_blog_tagline
+import com.maxrave.simpmusic.expect.isDesktopAutostartSupported
+import simpmusic.composeapp.generated.resources.desktop_settings
 import simpmusic.composeapp.generated.resources.discord_integration
 import simpmusic.composeapp.generated.resources.donation
 import simpmusic.composeapp.generated.resources.download_quality
@@ -424,6 +426,10 @@ import simpmusic.composeapp.generated.resources.sponsor_block_intro
 import simpmusic.composeapp.generated.resources.spotify
 import simpmusic.composeapp.generated.resources.spotify_canvas_cache
 import simpmusic.composeapp.generated.resources.spotify_lyrícs_info
+import simpmusic.composeapp.generated.resources.start_minimized_to_tray
+import simpmusic.composeapp.generated.resources.start_minimized_to_tray_description
+import simpmusic.composeapp.generated.resources.start_with_system
+import simpmusic.composeapp.generated.resources.start_with_system_description
 import simpmusic.composeapp.generated.resources.storage
 import simpmusic.composeapp.generated.resources.such_as_music_video_lyrics_video_podcasts_and_more
 import simpmusic.composeapp.generated.resources.sync_follow_to_youtube
@@ -587,6 +593,8 @@ fun SettingScreen(
     val autoBackupLastTime by viewModel.autoBackupLastTime.collectAsStateWithLifecycle()
     val updateChannel by viewModel.updateChannel.collectAsStateWithLifecycle()
     val enableLiquidGlass by viewModel.enableLiquidGlass.collectAsStateWithLifecycle()
+    val startWithSystem by viewModel.startWithSystem.collectAsStateWithLifecycle()
+    val startMinimizedToTray by viewModel.startMinimizedToTray.collectAsStateWithLifecycle()
     val themeMode by sharedViewModel.getThemeMode().collectAsStateWithLifecycle(DataStoreManager.THEME_MODE_DARK)
     val themeColorSource by sharedViewModel.getThemeColorSource().collectAsStateWithLifecycle(DataStoreManager.THEME_COLOR_DEFAULT)
     val customThemeColorHex by sharedViewModel.getCustomThemeColor().collectAsStateWithLifecycle(DataStoreManager.DEFAULT_THEME_COLOR_HEX)
@@ -2245,6 +2253,22 @@ fun SettingScreen(
                         showLastfmCredentialsDialog = true
                     },
                 )
+            }
+        }
+        if (isDesktopAutostartSupported()) {
+            item(key = "desktop_settings") {
+                SettingGroup(title = stringResource(Res.string.desktop_settings)) {
+                    SettingItem(
+                        title = stringResource(Res.string.start_with_system),
+                        subtitle = stringResource(Res.string.start_with_system_description),
+                        switch = (startWithSystem to { viewModel.setStartWithSystem(it) }),
+                    )
+                    SettingItem(
+                        title = stringResource(Res.string.start_minimized_to_tray),
+                        subtitle = stringResource(Res.string.start_minimized_to_tray_description),
+                        switch = (startMinimizedToTray to { viewModel.setStartMinimizedToTray(it) }),
+                    )
+                }
             }
         }
         item(key = "sponsor_block") {
