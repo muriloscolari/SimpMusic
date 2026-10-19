@@ -610,6 +610,25 @@ fun MiniPlayer(
         var showQueueBottomSheet by rememberSaveable {
             mutableStateOf(false)
         }
+        var isVolumeSliding by rememberSaveable {
+            mutableStateOf(false)
+        }
+        var volumeValue by rememberSaveable {
+            mutableFloatStateOf(0f)
+        }
+        LaunchedEffect(key1 = controllerState, key2 = isVolumeSliding) {
+            if (!isVolumeSliding) {
+                volumeValue = controllerState.volume
+            }
+        }
+        var previousVolumeValue by rememberSaveable {
+            mutableFloatStateOf(controllerState.volume.takeIf { it > 0f } ?: 1f)
+        }
+        LaunchedEffect(controllerState.volume) {
+            if (controllerState.volume > 0f) {
+                previousVolumeValue = controllerState.volume
+            }
+        }
         LaunchedEffect(key1 = timelineState, key2 = isSliding) {
             if (!isSliding) {
                 sliderValue =
@@ -641,6 +660,23 @@ fun MiniPlayer(
             modifier
                 .liquidGlass(backdrop, layer, luminance, capsuleShape, blurScale = 1.2f)
                 .clip(capsuleShape)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Scroll) {
+                                val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                if (scrollDelta != 0f) {
+                                    val step = if (scrollDelta < 0f) 0.05f else -0.05f
+                                    val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
+                                    volumeValue = newVol
+                                    sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVol))
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                    }
+                }
                 .clickable {
                     onClick()
                 },
@@ -993,28 +1029,6 @@ fun MiniPlayer(
                             )
                         }
                     }
-                    var isVolumeSliding by rememberSaveable {
-                        mutableStateOf(false)
-                    }
-                    var volumeValue by rememberSaveable {
-                        mutableFloatStateOf(0f)
-                    }
-                    LaunchedEffect(key1 = controllerState, key2 = isVolumeSliding) {
-                        if (!isVolumeSliding) {
-                            volumeValue = controllerState.volume
-                        }
-                    }
-                    // Remembers the level to come back to when unmuting, so the button restores
-                    // what the user was listening at instead of jumping to full volume.
-                    // Starting muted leaves nothing to restore, so full volume stays the fallback.
-                    var previousVolumeValue by rememberSaveable {
-                        mutableFloatStateOf(controllerState.volume.takeIf { it > 0f } ?: 1f)
-                    }
-                    LaunchedEffect(controllerState.volume) {
-                        if (controllerState.volume > 0f) {
-                            previousVolumeValue = controllerState.volume
-                        }
-                    }
                     // Vertical volume popup anchored on the speaker icon, the way a context menu
                     // opens: a Popup draws outside the capsule's bounds, so the capsule keeps its
                     // width instead of expanding sideways as it used to. `hoverable` sits on the
@@ -1025,27 +1039,7 @@ fun MiniPlayer(
                     val popupInteraction = remember { MutableInteractionSource() }
                     val isPopupHovered by popupInteraction.collectIsHoveredAsState()
                     Box(
-                        modifier =
-                            Modifier
-                                .hoverable(volumeInteraction)
-                                .pointerInput(Unit) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                                            if (event.type == PointerEventType.Scroll) {
-                                                val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                                                if (scrollDelta != 0f) {
-                                                    // Scrolling up (negative delta) increases volume, scrolling down decreases volume
-                                                    val step = if (scrollDelta < 0f) 0.05f else -0.05f
-                                                    val newVol = (controllerState.volume + step).coerceIn(0f, 1f)
-                                                    volumeValue = newVol
-                                                    sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVol))
-                                                    event.changes.forEach { it.consume() }
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
+                        modifier = Modifier.hoverable(volumeInteraction),
                     ) {
                         IconButton(
                             onClick = {
