@@ -1054,6 +1054,10 @@ class SharedViewModel(
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.UpdateVolume(newVolume))
                     dataStoreManager.setPlayerVolume(newVolume)
                 }
+
+                UIEvent.StartRadio -> {
+                    mediaPlayerHandler.toggleRadio()
+                }
             }
         }
 
@@ -2253,6 +2257,8 @@ sealed class UIEvent {
     ) : UIEvent()
 
     data object ToggleLike : UIEvent()
+
+    data object StartRadio : UIEvent()
 }
 
 enum class LyricsProvider {
