@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -154,7 +155,12 @@ fun HomeItem(
     }
 
     Column {
-        HomeSectionHeader(data = data, navController = navController, onPlayAll = { homeViewModel.playAll(data) })
+        HomeSectionHeader(
+            data = data,
+            navController = navController,
+            onPlayAll = { homeViewModel.playAll(data) },
+            lazyListState = lazyListState,
+        )
         LazyRow(
             state = lazyListState,
             flingBehavior = snapperFlingBehavior,
@@ -196,6 +202,8 @@ fun HomeSectionHeader(
     data: HomeItem,
     navController: NavController,
     onPlayAll: () -> Unit,
+    lazyListState: LazyListState? = null,
+    navigationArrows: (@Composable () -> Unit)? = null,
 ) {
     val channelId = data.channelId
     val moreEndpoint = data.moreEndpoint
@@ -286,6 +294,11 @@ fun HomeSectionHeader(
             ) {
                 Text(stringResource(Res.string.play_all), style = typo().bodySmall)
             }
+        }
+        if (navigationArrows != null) {
+            navigationArrows()
+        } else if (lazyListState != null && getPlatform() == Platform.Desktop) {
+            CarouselNavigationArrows(lazyListState = lazyListState)
         }
     }
 }

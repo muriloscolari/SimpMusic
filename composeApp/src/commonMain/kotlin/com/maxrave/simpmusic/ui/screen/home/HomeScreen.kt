@@ -124,6 +124,7 @@ import com.maxrave.simpmusic.extension.isScrollingUp
 import com.maxrave.simpmusic.extension.rgbFactor
 import com.maxrave.simpmusic.extension.ultraThinBarStyle
 import com.maxrave.simpmusic.getPlatform
+import com.maxrave.simpmusic.ui.component.CarouselNavigationArrows
 import com.maxrave.simpmusic.ui.component.CenterLoadingBox
 import com.maxrave.simpmusic.ui.component.Chip
 import com.maxrave.simpmusic.ui.component.DropdownButton
@@ -1065,6 +1066,9 @@ fun QuickPicks(
                     Text(stringResource(Res.string.play_all), style = typo().bodySmall)
                 }
             }
+            if (getPlatform() == Platform.Desktop) {
+                CarouselNavigationArrows(lazyGridState = lazyListState)
+            }
         }
         LazyHorizontalGrid(
             rows = GridCells.Fixed(4),
@@ -1130,16 +1134,24 @@ fun MoodMomentAndGenre(
         mood.sections.forEach { section ->
             val gridState = rememberLazyGridState()
             val flingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = gridState))
-            Text(
-                text = section.title,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+            Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(vertical = 5.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = section.title,
+                    style = typo().headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (getPlatform() == Platform.Desktop) {
+                    CarouselNavigationArrows(lazyGridState = gridState)
+                }
+            }
             LazyHorizontalGrid(
                 rows = GridCells.Fixed(3),
                 modifier = Modifier.height(210.dp),
@@ -1210,19 +1222,27 @@ fun ChartData(
         },
     ) {
         chart.listChartItem.forEach { item ->
-            Text(
-                text = item.title,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+            val lazyListState = rememberLazyListState()
+            val snapperFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyListState = lazyListState))
+            Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(vertical = 10.dp),
-            )
-            val lazyListState = rememberLazyListState()
-            val snapperFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyListState = lazyListState))
-            LazyRow(flingBehavior = snapperFlingBehavior) {
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.title,
+                    style = typo().headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (getPlatform() == Platform.Desktop) {
+                    CarouselNavigationArrows(lazyListState = lazyListState)
+                }
+            }
+            LazyRow(flingBehavior = snapperFlingBehavior, state = lazyListState) {
                 items(item.playlists.size, key = { index ->
                     val data = item.playlists[index]
                     data.id + data.title + index
@@ -1241,16 +1261,24 @@ fun ChartData(
                 }
             }
         }
-        Text(
-            text = stringResource(Res.string.top_artists),
-            style = typo().headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
+        Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(vertical = 10.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(Res.string.top_artists),
+                style = typo().headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            if (getPlatform() == Platform.Desktop) {
+                CarouselNavigationArrows(lazyGridState = lazyListState2)
+            }
+        }
         LazyHorizontalGrid(
             rows = GridCells.Fixed(3),
             modifier = Modifier.height(240.dp),
@@ -1282,18 +1310,26 @@ fun ChartData(
         )
         // Ranked podcast shows, laid out exactly like the artist chart above.
         chart.podcasts?.let { podcasts ->
-            Text(
-                text = podcasts.title,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+            val podcastGridState = rememberLazyGridState()
+            val podcastFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = podcastGridState))
+            Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(vertical = 10.dp),
-            )
-            val podcastGridState = rememberLazyGridState()
-            val podcastFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = podcastGridState))
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = podcasts.title,
+                    style = typo().headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (getPlatform() == Platform.Desktop) {
+                    CarouselNavigationArrows(lazyGridState = podcastGridState)
+                }
+            }
             LazyHorizontalGrid(
                 rows = GridCells.Fixed(3),
                 modifier = Modifier.height(240.dp),

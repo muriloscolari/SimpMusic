@@ -19,6 +19,7 @@ import androidx.compose.material3.carousel.CarouselItemDrawInfo
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +42,9 @@ import com.maxrave.domain.utils.connectArtists
 import com.maxrave.domain.utils.toListName
 import com.maxrave.domain.utils.toSongEntity
 import com.maxrave.domain.utils.toTrack
+import com.maxrave.simpmusic.Platform
 import com.maxrave.simpmusic.extension.smoothScrimBrush
+import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.ui.theme.ForceDarkContent
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.HomeViewModel
@@ -77,7 +80,34 @@ fun HomeDiscoverSection(
     val state = rememberCarouselState { songs.size }
     val scope = rememberCoroutineScope()
     Column {
-        HomeSectionHeader(data = data, navController = navController, onPlayAll = { homeViewModel.playAll(data) })
+        HomeSectionHeader(
+            data = data,
+            navController = navController,
+            onPlayAll = { homeViewModel.playAll(data) },
+            navigationArrows =
+                if (getPlatform() == Platform.Desktop) {
+                    {
+                        val canScrollLeft by remember { derivedStateOf { state.currentItem > 0 } }
+                        val canScrollRight by remember { derivedStateOf { state.currentItem < songs.size - 1 } }
+                        CarouselNavigationArrows(
+                            canScrollLeft = canScrollLeft,
+                            canScrollRight = canScrollRight,
+                            onScrollLeft = {
+                                scope.launch {
+                                    state.animateScrollToItem((state.currentItem - 1).coerceAtLeast(0))
+                                }
+                            },
+                            onScrollRight = {
+                                scope.launch {
+                                    state.animateScrollToItem((state.currentItem + 1).coerceAtMost(songs.lastIndex))
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
+        )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val wide = maxWidth >= WIDE_LAYOUT_MIN_DP.dp
             val heroWidth = maxWidth * (if (wide) 0.6f else 0.74f)
