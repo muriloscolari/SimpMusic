@@ -14,11 +14,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import javax.swing.text.JTextComponent
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.LocalPlatformContext
@@ -46,6 +54,7 @@ import com.maxrave.simpmusic.utils.ComposeResUtils
 import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
+import com.maxrave.simpmusic.viewModel.UIEvent
 import com.maxrave.simpmusic.viewModel.changeLanguageNative
 import dev.nucleusframework.composenativetray.tray.api.Tray
 import dev.nucleusframework.core.runtime.SingleInstanceManager
@@ -382,6 +391,20 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             transparent = !nativeTitleBar,
             state = windowState,
             visible = isVisible,
+            onPreviewKeyEvent = { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Spacebar) {
+                    val focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+                    val isTextInput = focusOwner is JTextComponent || focusOwner?.inputMethodRequests != null
+                    if (!keyEvent.isCtrlPressed && !keyEvent.isAltPressed && !keyEvent.isMetaPressed && !isTextInput) {
+                        sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
         ) {
             var isAwtIconified by remember { mutableStateOf(false) }
             var isOccluded by remember { mutableStateOf(false) }
