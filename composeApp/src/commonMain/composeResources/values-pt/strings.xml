@@ -589,4 +589,9 @@
     <string name="lastfm_api_credentials_missing">Credenciais não configuradas. Clique para configurar API Key e Secret.</string>
     <string name="lastfm_api_key_label">Chave de API (API Key)</string>
     <string name="lastfm_api_secret_label">Segredo Compartilhado (Shared Secret)</string>
+    <string name="desktop_settings">Desktop</string>
+    <string name="start_with_system">Iniciar com o sistema</string>
+    <string name="start_with_system_description">Iniciar o SimpMusic automaticamente ao ligar o computador</string>
+    <string name="start_minimized_to_tray">Iniciar minimizado na bandeja do sistema</string>
+    <string name="start_minimized_to_tray_description">Iniciar oculto na bandeja do sistema</string>
 </resources>
