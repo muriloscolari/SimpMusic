@@ -84,6 +84,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -202,6 +203,13 @@ class SharedViewModel(
 
     fun consumeFullscreenLyricsRequest() {
         _fullscreenLyricsRequest.value = false
+    }
+
+    private val _homeRefreshRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val homeRefreshRequest: SharedFlow<Unit> = _homeRefreshRequest.asSharedFlow()
+
+    fun refreshHome() {
+        _homeRefreshRequest.tryEmit(Unit)
     }
 
     private var getFormatFlowJob: Job? = null
