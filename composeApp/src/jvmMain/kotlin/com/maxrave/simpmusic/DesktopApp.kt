@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.maxrave.simpmusic
 
 import androidx.compose.foundation.layout.Column
@@ -21,12 +23,17 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import javax.swing.text.JTextComponent
+import com.maxrave.simpmusic.utils.DesktopNavigation
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.LocalPlatformContext
@@ -526,7 +533,21 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         }
                     }.apply { start() }
 
+                val toolkit = java.awt.Toolkit.getDefaultToolkit()
+                val awtMouseListener =
+                    java.awt.event.AWTEventListener { event ->
+                        if (event is java.awt.event.MouseEvent && event.id == java.awt.event.MouseEvent.MOUSE_RELEASED) {
+                            if (event.button == 4) {
+                                DesktopNavigation.navigateBack()
+                            } else if (event.button == 5) {
+                                DesktopNavigation.navigateForward()
+                            }
+                        }
+                    }
+                toolkit.addAWTEventListener(awtMouseListener, java.awt.AWTEvent.MOUSE_EVENT_MASK)
+
                 onDispose {
+                    toolkit.removeAWTEventListener(awtMouseListener)
                     DesktopOcclusionManager.onOcclusionChanged = null
                     DesktopOcclusionManager.stop()
                     statePollTimer.stop()
@@ -594,6 +615,20 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 modifier =
                     Modifier
                         .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    if (event.type == PointerEventType.Release) {
+                                        if (event.button == PointerButton.Back) {
+                                            DesktopNavigation.navigateBack()
+                                        } else if (event.button == PointerButton.Forward) {
+                                            DesktopNavigation.navigateForward()
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         .then(
                             if (!nativeTitleBar) {
                                 Modifier.clip(RoundedCornerShape(12.dp))

@@ -105,6 +105,8 @@ import com.maxrave.simpmusic.ui.theme.desktopWindowLight
 import com.maxrave.simpmusic.ui.theme.fontFamily
 import com.maxrave.simpmusic.ui.theme.parseThemeColorHex
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.utils.DesktopNavEvent
+import com.maxrave.simpmusic.utils.DesktopNavigation
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.utils.isAppLinkAvailable
 import com.maxrave.simpmusic.utils.libraryTabOf
@@ -219,6 +221,44 @@ fun App(
     }
     LaunchedEffect(isShowNowPlaylistScreen) {
         if (isShowNowPlaylistScreen) userStarted = true
+    }
+
+    if (isDesktopShell) {
+        var wasNowPlayingClosedByMouseBack by remember { mutableStateOf(false) }
+        val forwardStack = remember { mutableListOf<String>() }
+
+        LaunchedEffect(Unit) {
+            DesktopNavigation.events.collect { event ->
+                when (event) {
+                    DesktopNavEvent.Back -> {
+                        if (isShowNowPlaylistScreen) {
+                            isShowNowPlaylistScreen = false
+                            wasNowPlayingClosedByMouseBack = true
+                        } else {
+                            wasNowPlayingClosedByMouseBack = false
+                            val currentRoute = navController.currentBackStackEntry?.destination?.route
+                            if (currentRoute != null && !currentRoute.contains("{")) {
+                                forwardStack.add(currentRoute)
+                            }
+                            if (navController.previousBackStackEntry != null) {
+                                navController.navigateUp()
+                            }
+                        }
+                    }
+                    DesktopNavEvent.Forward -> {
+                        if (wasNowPlayingClosedByMouseBack) {
+                            isShowNowPlaylistScreen = true
+                            wasNowPlayingClosedByMouseBack = false
+                        } else if (forwardStack.isNotEmpty()) {
+                            val nextRoute = forwardStack.removeLast()
+                            try {
+                                navController.navigate(nextRoute)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+        }
     }
 
     val hazeState =
