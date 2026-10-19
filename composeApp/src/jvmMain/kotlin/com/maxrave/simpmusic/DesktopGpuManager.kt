@@ -71,31 +71,35 @@ object DesktopGpuManager {
         }
     }
 
+    fun ensurePaused(window: Window) {
+        if (!isMinimized) return
+        runCatching {
+            findSkiaLayers(window).forEach { layer ->
+                setSkiaLayerShowingCached(layer, false)
+            }
+        }
+    }
+
     fun onMinimized(window: Window) {
         if (isMinimized) return
         isMinimized = true
-        Logger.i(TAG, "Desktop window minimized/backgrounded: pausing GPU rendering and freeing VRAM")
+        Logger.i(TAG, "Desktop window minimized/occluded: pausing GPU rendering and freeing VRAM")
 
-        // 1. Hide the content pane, all SkiaLayers and Canvases so Skiko's Redrawer stops completely
+        // 1. Temporarily mark SkiaLayers as not showing so Skiko skips all GPU redraw loops
+        // without Swing clearing the window buffer to white.
         runCatching {
-            if (window is JFrame) {
-                window.contentPane.isVisible = false
-            }
             findSkiaLayers(window).forEach { layer ->
-                layer.isVisible = false
-            }
-            findCanvases(window).forEach { canvas ->
-                canvas.isVisible = false
+                setSkiaLayerShowingCached(layer, false)
             }
         }
 
-        // 2. Shrink Skia GPU resource cache and purge textures from VRAM
+        // 2. Shrink Skia GPU resource cache and purge unlocked textures from VRAM
         runCatching {
             val ctx = directContextRef?.get() ?: getDirectContext(window)
             if (ctx != null) {
                 ctx.resourceCacheLimit = MINIMIZED_CACHE_BYTES
                 ctx.resetAll()
-                ctx.submit(true)
+                ctx.submit(false)
                 Logger.i(TAG, "Purged Skia GPU resource cache in VRAM")
             }
         }
@@ -118,20 +122,12 @@ object DesktopGpuManager {
     fun onRestored(window: Window) {
         if (!isMinimized) return
         isMinimized = false
-        Logger.i(TAG, "Desktop window restored/foregrounded: resuming GPU rendering")
+        Logger.i(TAG, "Desktop window restored: resuming GPU rendering")
 
-        // 1. Restore visibility and trigger repaint
+        // 1. Restore SkiaLayers showing state
         runCatching {
-            if (window is JFrame) {
-                window.contentPane.isVisible = true
-            }
             findSkiaLayers(window).forEach { layer ->
-                layer.isVisible = true
-                layer.repaint()
-            }
-            findCanvases(window).forEach { canvas ->
-                canvas.isVisible = true
-                canvas.repaint()
+                setSkiaLayerShowingCached(layer, true)
             }
         }
 
@@ -146,6 +142,22 @@ object DesktopGpuManager {
         // 3. Request immediate redraw
         runCatching {
             window.repaint()
+        }
+    }
+
+    private fun setSkiaLayerShowingCached(layer: Component, showing: Boolean) {
+        runCatching {
+            var clazz: Class<*>? = layer.javaClass
+            while (clazz != null) {
+                try {
+                    val field = clazz.getDeclaredField("isShowingCached")
+                    field.isAccessible = true
+                    field.setBoolean(layer, showing)
+                    break
+                } catch (e: NoSuchFieldException) {
+                    clazz = clazz.superclass
+                }
+            }
         }
     }
 

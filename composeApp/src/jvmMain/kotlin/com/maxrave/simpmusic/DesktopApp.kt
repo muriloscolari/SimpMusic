@@ -383,6 +383,10 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             var isOccluded by remember { mutableStateOf(false) }
             val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isOccluded
 
+            LaunchedEffect(window) {
+                window.background = java.awt.Color(20, 20, 20)
+            }
+
             LaunchedEffect(isWindowMinimized) {
                 if (isWindowMinimized) {
                     DesktopGpuManager.onMinimized(window)
@@ -472,12 +476,20 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         val isIconic = (window.extendedState and Frame.ICONIFIED) != 0 || windowState.isMinimized || !isVisible
                         if (isIconic) {
                             if (!isAwtIconified) isAwtIconified = true
-                            if (!DesktopGpuManager.isMinimized) DesktopGpuManager.onMinimized(window)
+                            if (!DesktopGpuManager.isMinimized) {
+                                DesktopGpuManager.onMinimized(window)
+                            } else {
+                                DesktopGpuManager.ensurePaused(window)
+                            }
                         } else {
                             if (isAwtIconified) isAwtIconified = false
-                            if (isOccluded && !DesktopGpuManager.isMinimized) {
-                                DesktopGpuManager.onMinimized(window)
-                            } else if (!isOccluded && DesktopGpuManager.isMinimized) {
+                            if (isOccluded) {
+                                if (!DesktopGpuManager.isMinimized) {
+                                    DesktopGpuManager.onMinimized(window)
+                                } else {
+                                    DesktopGpuManager.ensurePaused(window)
+                                }
+                            } else if (DesktopGpuManager.isMinimized) {
                                 triggerWakeup()
                             }
                         }
