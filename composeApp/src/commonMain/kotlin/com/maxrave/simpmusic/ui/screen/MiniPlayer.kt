@@ -133,6 +133,7 @@ import com.maxrave.simpmusic.ui.icon.Headphones
 import com.maxrave.simpmusic.ui.icon.OpenInFull
 import com.maxrave.simpmusic.ui.icon.PictureInPictureAlt
 import com.maxrave.simpmusic.ui.icon.QueueMusic
+import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.VolumeOff
 import com.maxrave.simpmusic.ui.icon.VolumeUp
@@ -150,6 +151,7 @@ import org.koin.compose.koinInject
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.crossfading
 import simpmusic.composeapp.generated.resources.live_badge
+import simpmusic.composeapp.generated.resources.start_radio
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -1007,6 +1009,24 @@ fun MiniPlayer(
                         HeartCheckBox(checked = controllerState.isLiked, size = 32) {
                             sharedViewModel.onUIEvent(UIEvent.ToggleLike)
                         }
+                    }
+                    val nowPlayingData by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
+                    val isRadioActive = nowPlayingData.isRadioQueue
+                    IconButton(
+                        onClick = {
+                            sharedViewModel.onUIEvent(UIEvent.StartRadio)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = SimpIcons.Sensors,
+                            tint =
+                                if (isRadioActive) {
+                                    if (isDarkTheme) com.maxrave.simpmusic.ui.theme.seed else MaterialTheme.colorScheme.primary
+                                } else {
+                                    textColor
+                                },
+                            contentDescription = stringResource(Res.string.start_radio),
+                        )
                     }
                     IconButton(
                         onClick = {
