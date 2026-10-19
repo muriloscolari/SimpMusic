@@ -63,6 +63,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maxrave.domain.data.model.loginsync.LoginSyncException
+import com.maxrave.domain.data.model.loginsync.SettingsCategory
+import com.maxrave.domain.data.model.loginsync.SyncDirection
 import com.maxrave.simpmusic.extension.findActivity
 import com.maxrave.simpmusic.ui.component.QrScanner
 import com.maxrave.simpmusic.ui.component.rememberSurfaceDarkColors
@@ -253,8 +255,12 @@ actual fun LoginSyncDialog(onDismiss: () -> Unit) {
                         }
 
                         is Step.Done -> {
+                            val dirText = if (step.direction == SyncDirection.PUSH) "Enviado para" else "Recebido de"
+                            val servicesText = step.services.map { it.label }
+                            val settingsText = step.settings.map { it.label }
+                            val allItems = (servicesText + settingsText).joinToString()
                             Status(
-                                stringResource(Res.string.login_sync_sent, step.desktop.name, step.services.joinToString { it.label }),
+                                "Sincronização concluída com sucesso!\n\n$dirText ${step.desktop.name}:\n$allItems",
                                 progress = false,
                             ) {
                                 SheetButton(stringResource(Res.string.ok), ::close)
@@ -294,33 +300,111 @@ actual fun LoginSyncDialog(onDismiss: () -> Unit) {
         }
 
         is Step.Choose -> {
+            val isPush = uiState.direction == SyncDirection.PUSH
+            val availableServices = if (isPush) uiState.signedIn else step.desktop.availableLogins
+            val hasItemsToSelect = uiState.selected.isNotEmpty() || uiState.selectedSettings.isNotEmpty()
+
             AlertDialog(
                 onDismissRequest = ::close,
-                title = { Text(text = stringResource(Res.string.login_sync_choose_title), style = typo().titleSmall) },
+                title = { Text(text = "Sincronizar com ${step.desktop.name}", style = typo().titleSmall) },
                 text = {
-                    Column {
-                        uiState.signedIn.forEach { service ->
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "Sentido da sincronização:",
+                            style = typo().labelMedium,
+                            color = colors.subtitle,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Button(
+                                onClick = { viewModel.setDirection(SyncDirection.PUSH) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isPush) seed else colors.disabled.copy(alpha = 0.2f),
+                                    contentColor = if (isPush) Color.White else colors.content,
+                                ),
+                            ) {
+                                Text(
+                                    text = "Celular ➔ PC",
+                                    style = typo().labelSmall,
+                                    maxLines = 1,
+                                )
+                            }
+                            Button(
+                                onClick = { viewModel.setDirection(SyncDirection.PULL) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (!isPush) seed else colors.disabled.copy(alpha = 0.2f),
+                                    contentColor = if (!isPush) Color.White else colors.content,
+                                ),
+                            ) {
+                                Text(
+                                    text = "PC ➔ Celular",
+                                    style = typo().labelSmall,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
+                        if (availableServices.isNotEmpty()) {
+                            Text(
+                                text = "Contas:",
+                                style = typo().labelMedium,
+                                color = colors.subtitle,
+                            )
+                            availableServices.forEach { service ->
+                                Row(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .toggleable(
+                                                value = service in uiState.selected,
+                                                role = Role.Checkbox,
+                                                onValueChange = { viewModel.toggle(service) },
+                                            ).padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Checkbox(checked = service in uiState.selected, onCheckedChange = null)
+                                    Text(text = service.label, style = typo().bodyMedium)
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Configurações:",
+                            style = typo().labelMedium,
+                            color = colors.subtitle,
+                        )
+                        SettingsCategory.entries.forEach { category ->
                             Row(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
                                         .toggleable(
-                                            value = service in uiState.selected,
+                                            value = category in uiState.selectedSettings,
                                             role = Role.Checkbox,
-                                            onValueChange = { viewModel.toggle(service) },
+                                            onValueChange = { viewModel.toggleSetting(category) },
                                         ).padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Checkbox(checked = service in uiState.selected, onCheckedChange = null)
-                                Text(text = service.label, style = typo().bodyMedium)
+                                Checkbox(checked = category in uiState.selectedSettings, onCheckedChange = null)
+                                Text(text = category.label, style = typo().bodyMedium)
                             }
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(enabled = uiState.selected.isNotEmpty(), onClick = viewModel::send) {
-                        Text(text = stringResource(Res.string.login_sync_send))
+                    TextButton(enabled = hasItemsToSelect, onClick = viewModel::send) {
+                        Text(text = if (isPush) "Enviar para o PC" else "Trazer do PC")
                     }
                 },
                 dismissButton = {

@@ -39,6 +39,7 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.maxrave.domain.data.model.loginsync.LoginSyncHostState
+import com.maxrave.domain.data.model.loginsync.SyncDirection
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.LoginSyncHostViewModel
 import org.jetbrains.compose.resources.stringResource
@@ -126,7 +127,15 @@ actual fun LoginSyncDialog(onDismiss: () -> Unit) {
                     }
 
                     is LoginSyncHostState.Done -> {
-                        Text(text = stringResource(Res.string.login_sync_received, s.services.joinToString { it.label }))
+                        val dirText = if (s.direction == SyncDirection.PUSH) "Recebido(s) do celular" else "Enviado(s) para o celular"
+                        val servicesText = s.services.map { it.label }
+                        val settingsText = s.settings.map { it.label }
+                        val allItems = (servicesText + settingsText).joinToString()
+                        Text(
+                            text = "Sincronização concluída com sucesso!\n\n$dirText:\n$allItems",
+                            style = typo().bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
                     }
 
                     LoginSyncHostState.Expired -> {
