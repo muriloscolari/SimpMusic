@@ -14,6 +14,7 @@ import com.maxrave.domain.data.model.streams.TimeLine
 import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.mediaservice.handler.ControlState
 import com.maxrave.simpmusic.extension.GradientOffset
+import com.maxrave.simpmusic.extension.parseRichSyncWords
 import com.maxrave.simpmusic.viewModel.LyricsProvider
 import com.maxrave.simpmusic.viewModel.NowPlayingScreenData
 import com.maxrave.simpmusic.viewModel.UIEvent
@@ -74,10 +75,15 @@ private val WHITESPACE_REGEX = Regex("""\s+""")
 // Word-by-word lyrics carry a timestamp per word; replace each with a space
 // (not ""), then collapse — otherwise the words run together.
 // Shared by every Now Playing content style (Spotify + M3 Expressive).
-internal fun String.stripRichSyncTimestamps(): String =
-    replace(RICH_SYNC_TIMESTAMP_REGEX, " ")
+internal fun String.stripRichSyncTimestamps(): String {
+    val parsed = parseRichSyncWords(this, "0", "0")
+    if (parsed != null && parsed.words.isNotEmpty()) {
+        return parsed.words.joinToString(" ") { it.text }
+    }
+    return replace(RICH_SYNC_TIMESTAMP_REGEX, " ")
         .replace(WHITESPACE_REGEX, " ")
         .trim()
+}
 
 /**
  * "154 kbps · 48 kHz" — the Apple Music style's quality line, read off the format YouTube served

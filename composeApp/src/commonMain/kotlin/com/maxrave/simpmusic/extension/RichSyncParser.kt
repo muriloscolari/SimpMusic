@@ -88,15 +88,74 @@ fun parseRichSyncWords(
         return null
     }
 
-    println("[parseRichSyncWords] Successfully parsed ${wordTimings.size} words")
+    val finalWordTimings = mergeSyllableTimings(wordTimings)
+
+    println("[parseRichSyncWords] Successfully parsed ${finalWordTimings.size} words")
 
     // Parse line timing
     val lineStart = lineStartTimeMs.toLongOrNull() ?: 0L
     val lineEnd = lineEndTimeMs.toLongOrNull() ?: Long.MAX_VALUE
 
     return ParsedRichSyncLine(
-        words = wordTimings,
+        words = finalWordTimings,
         lineStartTimeMs = lineStart,
         lineEndTimeMs = lineEnd,
     )
 }
+
+private fun mergeSyllableTimings(timings: List<WordTiming>): List<WordTiming> {
+    if (timings.isEmpty()) return timings
+    val merged = mutableListOf<WordTiming>()
+    var i = 0
+    while (i < timings.size) {
+        var current = timings[i]
+        while (i + 1 < timings.size) {
+            val next = timings[i + 1]
+            if (shouldMergeAdjacentSyllables(current.text, next.text)) {
+                current =
+                    WordTiming(
+                        text = current.text + next.text,
+                        startTimeMs = current.startTimeMs,
+                    )
+                i++
+            } else {
+                break
+            }
+        }
+        merged.add(current)
+        i++
+    }
+    return merged
+}
+
+private fun shouldMergeAdjacentSyllables(curr: String, next: String): Boolean {
+    val cLow = cleanWord(curr)
+    val nLow = cleanWord(next)
+    if (cLow.isEmpty() || nLow.isEmpty()) return false
+
+    // 1. Hyphen
+    if (curr.endsWith("-")) return true
+
+    // 2. Single Latin letter that cannot be an English word
+    if (nLow.length == 1 && nLow[0] in 'a'..'z' && nLow !in setOf("a", "i", "o")) return true
+    if (cLow.length == 1 && cLow[0] in 'a'..'z' && cLow !in setOf("a", "i", "o")) return true
+
+    // 3. Known syllable prefixes that are not standalone words
+    if (cLow in setOf("brea", "camou", "wi", "lo", "fa", "pie", "pixe", "beau")) return true
+
+    // 4. Known syllable suffixes that are not standalone words
+    if (nLow in setOf("rea", "dy", "ce", "sh", "ve", "king", "flaged", "lete", "peat", "ture", "ted", "ces")) return true
+
+    // 5. 'al' + 'ready' / 'rea' / 'dy'
+    if (cLow == "a" && (nLow == "l" || nLow == "lready")) return true
+    if (cLow == "al" && (nLow == "rea" || nLow == "ready")) return true
+    if (cLow == "alrea" && nLow == "dy") return true
+
+    // 6. 'de' + 'lete', 're' + 'peat'
+    if ((cLow == "de" || cLow == "re") && (nLow == "lete" || nLow == "peat")) return true
+
+    return false
+}
+
+private fun cleanWord(word: String): String =
+    word.filter { it.isLetterOrDigit() || it == '\'' }.lowercase()
