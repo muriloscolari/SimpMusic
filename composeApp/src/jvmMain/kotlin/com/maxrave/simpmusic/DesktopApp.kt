@@ -412,6 +412,9 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     } else {
                         false
                     }
+                } else if (keyEvent.type == KeyEventType.KeyDown && (keyEvent.key == Key.F5 || (keyEvent.key == Key.R && (keyEvent.isCtrlPressed || keyEvent.isMetaPressed)))) {
+                    sharedViewModel.refreshHome()
+                    true
                 } else {
                     false
                 }

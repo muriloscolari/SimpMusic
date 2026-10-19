@@ -384,6 +384,14 @@ fun HomeScreen(
             }
         }
     }
+    LaunchedEffect(Unit) {
+        sharedViewModel.homeRefreshRequest.collect {
+            if (scrollState.firstVisibleItemIndex > 0) {
+                scrollState.scrollToItem(0)
+            }
+            onRefresh()
+        }
+    }
     LaunchedEffect(key1 = loading) {
         if (!loading) {
             isRefreshing = false
