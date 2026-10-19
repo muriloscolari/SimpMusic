@@ -311,6 +311,11 @@ val conveyorMakeLinuxApp =
         group = "distribution"
         description = "Run `conveyor make linux-app` for Linux x86_64 (glibc)."
         dependsOn(":composeApp:mpvSetupAll")
+        // writeConveyorConfig owns desktopApp/generated.conveyor.conf (included by the
+        // root conveyor.conf) and depends on proguardReleaseJars. Without this edge a
+        // build right after `clean` invokes the CLI with a config pointing at a missing
+        // proguard directory.
+        dependsOn("writeConveyorConfig")
         workingDir = rootDir
         commandLine(
             "conveyor",
