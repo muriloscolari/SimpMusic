@@ -89,6 +89,7 @@ import com.maxrave.simpmusic.ui.component.rememberHeartBurstState
 import com.maxrave.simpmusic.ui.component.rememberHolderPainter
 import com.maxrave.simpmusic.ui.icon.AddCircleOutline
 import com.maxrave.simpmusic.ui.icon.CheckCircle
+import com.maxrave.simpmusic.ui.icon.Close
 import com.maxrave.simpmusic.ui.icon.FastForward
 import com.maxrave.simpmusic.ui.icon.FastRewind
 import com.maxrave.simpmusic.ui.icon.Groups
@@ -508,6 +509,26 @@ internal fun AppleMusicCompactHeader(
         }
         Spacer(modifier = Modifier.width(12.dp))
         AppleMusicHeaderActions(state = state, actions = actions)
+        if (onReturnToMain != null && getPlatform() == Platform.Desktop) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .appleMusicPressInflate()
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.15f))
+                        .clickable(onClick = onReturnToMain),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = SimpIcons.Close,
+                    contentDescription = "Exit",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
 }
 
