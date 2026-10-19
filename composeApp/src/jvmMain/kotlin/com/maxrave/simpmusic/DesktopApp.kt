@@ -217,10 +217,10 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         loadKoinModules(viewModelModule)
     }
 
+    val dataStore = getKoin().get<DataStoreManager>()
     val language =
         runBlocking {
-            getKoin()
-                .get<DataStoreManager>()
+            dataStore
                 .language
                 .first()
                 .substring(0..1)
@@ -228,7 +228,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     changeLanguageNative(language)
 
     VersionManager.initialize()
-    configLastfm(BuildKonfig.lastfmApiKey, BuildKonfig.lastfmSecret)
+    val customLastfmKey = runBlocking { dataStore.lastfmCustomApiKey.first() }
+    val customLastfmSecret = runBlocking { dataStore.lastfmCustomSecret.first() }
+    val effectiveLastfmKey = if (customLastfmKey.isNotEmpty()) customLastfmKey else BuildKonfig.lastfmApiKey
+    val effectiveLastfmSecret = if (customLastfmSecret.isNotEmpty()) customLastfmSecret else BuildKonfig.lastfmSecret
+    configLastfm(effectiveLastfmKey, effectiveLastfmSecret)
     if (BuildKonfig.sentryDsn.isNotEmpty()) {
         val installationId = machineId()
         Sentry.init { options ->

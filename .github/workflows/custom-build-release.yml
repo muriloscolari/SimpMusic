@@ -43,9 +43,18 @@ jobs:
           sudo apt-get install -y libfuse2 zip
 
       - name: Configure local build properties
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
         run: |
           echo "sdk.dir=$ANDROID_HOME" > ./local.properties
           echo "isFullBuild=true" >> ./gradle.properties
+          if [ -n "$LASTFM_API_KEY" ]; then
+            echo "LASTFM_API_KEY=$LASTFM_API_KEY" >> ./local.properties
+          fi
+          if [ -n "$LASTFM_SECRET" ]; then
+            echo "LASTFM_SECRET=$LASTFM_SECRET" >> ./local.properties
+          fi
 
       - name: Export library definitions
         run: ./gradlew exportLibraryDefinitions --no-configuration-cache

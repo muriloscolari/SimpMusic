@@ -665,6 +665,11 @@
     <string name="lastfm_paste_callback_title">Did not come back automatically?</string>
     <string name="lastfm_paste_callback_hint">Paste the link your browser was redirected to</string>
     <string name="lastfm_paste_callback_confirm">Continue with this link</string>
+    <string name="lastfm_api_credentials">Last.fm API Credentials</string>
+    <string name="lastfm_api_credentials_desc">Configure custom Last.fm API Key and Secret</string>
+    <string name="lastfm_api_credentials_missing">Credentials not configured. Click to configure API Key and Secret.</string>
+    <string name="lastfm_api_key_label">API Key</string>
+    <string name="lastfm_api_secret_label">Shared Secret</string>
     <string name="logged_in_as">Logged in as %1$s</string>
     <string name="youtube_liked_music">YouTube Liked Music</string>
     <string name="keep_your_youtube_playlist_offline">Keep showing your YouTube playlist when offline</string>

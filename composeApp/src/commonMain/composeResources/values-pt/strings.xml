@@ -584,4 +584,9 @@
     <string name="max_parallel_downloads_custom">Personalizado (1–20)</string>
     <string name="max_parallel_downloads_warning">Colocar mais do que 5 downloads simultâneos pode deixar o aplicativo muito lento ou causar travamentos enquanto estiver baixando.</string>
     <string name="max_parallel_downloads_invalid">Digite um valor entre 1 e 20</string>
+    <string name="lastfm_api_credentials">Credenciais da API do Last.fm</string>
+    <string name="lastfm_api_credentials_desc">Configurar API Key e Shared Secret personalizados do Last.fm</string>
+    <string name="lastfm_api_credentials_missing">Credenciais não configuradas. Clique para configurar API Key e Secret.</string>
+    <string name="lastfm_api_key_label">Chave de API (API Key)</string>
+    <string name="lastfm_api_secret_label">Segredo Compartilhado (Shared Secret)</string>
 </resources>

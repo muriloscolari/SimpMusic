@@ -47,7 +47,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.core.component.inject
+import org.simpmusic.lastfm.configLastfm
 import org.simpmusic.lastfm.isLastfmAvailable
+import com.maxrave.simpmusic.BuildKonfig
 import org.jetbrains.compose.resources.getString as formatString
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.backup_create_failed
@@ -206,7 +208,14 @@ class SettingsViewModel(
      * Last.fm block in settings is hidden when it is false, rather than offering a login that
      * could never succeed.
      */
-    val lastfmAvailable: Boolean = isLastfmAvailable()
+    private val _lastfmAvailable = MutableStateFlow(isLastfmAvailable())
+    val lastfmAvailable: StateFlow<Boolean> = _lastfmAvailable
+
+    private val _lastfmCustomApiKey = MutableStateFlow("")
+    val lastfmCustomApiKey: StateFlow<String> = _lastfmCustomApiKey
+
+    private val _lastfmCustomSecret = MutableStateFlow("")
+    val lastfmCustomSecret: StateFlow<String> = _lastfmCustomSecret
 
     private val _lastfmUsername = MutableStateFlow("")
     val lastfmUsername: StateFlow<String> = _lastfmUsername
@@ -338,6 +347,7 @@ class SettingsViewModel(
         getDiscordRichPresenceEnabled()
         getLastfmSession()
         getLastfmScrobbleEnabled()
+        getLastfmCustomCredentials()
         getKeepYouTubePlaylistOffline()
         getCombineLocalAndYouTubeLiked()
         getDownloadQuality()
@@ -637,6 +647,32 @@ class SettingsViewModel(
     fun setLastfmScrobbleEnabled(enabled: Boolean) {
         viewModelScope.launch {
             dataStoreManager.setLastfmScrobbleEnabled(enabled)
+        }
+    }
+
+    private fun getLastfmCustomCredentials() {
+        viewModelScope.launch {
+            combine(dataStoreManager.lastfmCustomApiKey, dataStoreManager.lastfmCustomSecret) { key, secret ->
+                key to secret
+            }.collect { (key, secret) ->
+                _lastfmCustomApiKey.value = key
+                _lastfmCustomSecret.value = secret
+                val effectiveKey = key.ifEmpty { BuildKonfig.lastfmApiKey }
+                val effectiveSecret = secret.ifEmpty { BuildKonfig.lastfmSecret }
+                configLastfm(effectiveKey, effectiveSecret)
+                _lastfmAvailable.value = isLastfmAvailable()
+            }
+        }
+    }
+
+    fun setLastfmCustomCredentials(key: String, secret: String) {
+        viewModelScope.launch {
+            dataStoreManager.setLastfmCustomApiKey(key)
+            dataStoreManager.setLastfmCustomSecret(secret)
+            val effectiveKey = key.trim().ifEmpty { BuildKonfig.lastfmApiKey }
+            val effectiveSecret = secret.trim().ifEmpty { BuildKonfig.lastfmSecret }
+            configLastfm(effectiveKey, effectiveSecret)
+            _lastfmAvailable.value = isLastfmAvailable()
         }
     }
 

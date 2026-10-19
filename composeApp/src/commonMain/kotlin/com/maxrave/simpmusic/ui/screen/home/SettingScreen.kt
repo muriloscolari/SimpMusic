@@ -303,6 +303,11 @@ import simpmusic.composeapp.generated.resources.kill_service_on_exit_description
 import simpmusic.composeapp.generated.resources.language
 import simpmusic.composeapp.generated.resources.last_backup
 import simpmusic.composeapp.generated.resources.last_checked_at
+import simpmusic.composeapp.generated.resources.lastfm_api_credentials
+import simpmusic.composeapp.generated.resources.lastfm_api_credentials_desc
+import simpmusic.composeapp.generated.resources.lastfm_api_credentials_missing
+import simpmusic.composeapp.generated.resources.lastfm_api_key_label
+import simpmusic.composeapp.generated.resources.lastfm_api_secret_label
 import simpmusic.composeapp.generated.resources.lastfm_integration
 import simpmusic.composeapp.generated.resources.limit_player_cache
 import simpmusic.composeapp.generated.resources.listening_history
@@ -600,6 +605,10 @@ fun SettingScreen(
     val lastfmLoggedIn by viewModel.lastfmLoggedIn.collectAsStateWithLifecycle()
     val lastfmUsername by viewModel.lastfmUsername.collectAsStateWithLifecycle()
     val lastfmScrobbleEnabled by viewModel.lastfmScrobbleEnabled.collectAsStateWithLifecycle()
+    val lastfmAvailable by viewModel.lastfmAvailable.collectAsStateWithLifecycle()
+    val lastfmCustomApiKey by viewModel.lastfmCustomApiKey.collectAsStateWithLifecycle()
+    val lastfmCustomSecret by viewModel.lastfmCustomSecret.collectAsStateWithLifecycle()
+    var showLastfmCredentialsDialog by rememberSaveable { mutableStateOf(false) }
     val richPresenceEnabled by viewModel.richPresenceEnabled.collectAsStateWithLifecycle()
 
     val crossfadeEnabled by viewModel.crossfadeEnabled.collectAsStateWithLifecycle()
@@ -2191,11 +2200,9 @@ fun SettingScreen(
                 )
             }
         }
-        // Hidden entirely when the build carries no Last.fm credentials — a FOSS build, or a full
-        // build whose local.properties has no key.
-        if (viewModel.lastfmAvailable) {
-            item(key = "lastfm") {
-                SettingGroup(title = stringResource(Res.string.lastfm_integration)) {
+        item(key = "lastfm") {
+            SettingGroup(title = stringResource(Res.string.lastfm_integration)) {
+                if (lastfmAvailable) {
                     SettingItem(
                         title =
                             if (lastfmLoggedIn) {
@@ -2226,6 +2233,18 @@ fun SettingScreen(
                         isEnable = lastfmLoggedIn,
                     )
                 }
+                SettingItem(
+                    title = stringResource(Res.string.lastfm_api_credentials),
+                    subtitle =
+                        if (lastfmAvailable) {
+                            stringResource(Res.string.lastfm_api_credentials_desc)
+                        } else {
+                            stringResource(Res.string.lastfm_api_credentials_missing)
+                        },
+                    onClick = {
+                        showLastfmCredentialsDialog = true
+                    },
+                )
             }
         }
         item(key = "sponsor_block") {
@@ -2935,6 +2954,53 @@ fun SettingScreen(
                     },
                 ) {
                     Text(text = alertBasicState.dismiss)
+                }
+            },
+        )
+    }
+    if (showLastfmCredentialsDialog) {
+        var apiKeyInput by rememberSaveable { mutableStateOf(lastfmCustomApiKey) }
+        var apiSecretInput by rememberSaveable { mutableStateOf(lastfmCustomSecret) }
+        AlertDialog(
+            onDismissRequest = { showLastfmCredentialsDialog = false },
+            title = {
+                Text(text = stringResource(Res.string.lastfm_api_credentials), style = typo().titleSmall)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(Res.string.lastfm_api_credentials_desc),
+                        style = typo().bodySmall,
+                    )
+                    TextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        label = { Text(stringResource(Res.string.lastfm_api_key_label)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextField(
+                        value = apiSecretInput,
+                        onValueChange = { apiSecretInput = it },
+                        label = { Text(stringResource(Res.string.lastfm_api_secret_label)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.setLastfmCustomCredentials(apiKeyInput, apiSecretInput)
+                        showLastfmCredentialsDialog = false
+                    },
+                ) {
+                    Text(stringResource(Res.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLastfmCredentialsDialog = false }) {
+                    Text(stringResource(Res.string.cancel))
                 }
             },
         )
