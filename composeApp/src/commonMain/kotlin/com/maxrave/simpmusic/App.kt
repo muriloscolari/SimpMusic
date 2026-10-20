@@ -945,7 +945,12 @@ fun App(
                                 is UpdateState.Error -> {
                                     Button(
                                         onClick = {
-                                            PlatformAppUpdater.startUpdate(response.appImageUrl, response.zsyncUrl)
+                                            PlatformAppUpdater.startUpdate(
+                                                downloadUrl = response.appImageUrl,
+                                                zsyncUrl = response.zsyncUrl,
+                                                msixUrl = response.msixUrl,
+                                                appInstallerUrl = response.appInstallerUrl,
+                                            )
                                         },
                                     ) {
                                         Text(
@@ -958,7 +963,12 @@ fun App(
                                     if (isAppImageUpdater) {
                                         Button(
                                             onClick = {
-                                                PlatformAppUpdater.startUpdate(response.appImageUrl, response.zsyncUrl)
+                                                PlatformAppUpdater.startUpdate(
+                                                    downloadUrl = response.appImageUrl,
+                                                    zsyncUrl = response.zsyncUrl,
+                                                    msixUrl = response.msixUrl,
+                                                    appInstallerUrl = response.appInstallerUrl,
+                                                )
                                             },
                                         ) {
                                             Text(

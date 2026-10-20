@@ -51,13 +51,17 @@ if not defined MSIX (
 )
 
 echo.
-echo [2/3] Installing/updating MSIX: "%MSIX%"
-REM -ForceUpdateFromAnyVersion overwrites an existing install in place (keeps app
-REM data) even when the version is identical, so no manual uninstall is needed.
-REM If that still fails (e.g. signing publisher changed), fall back to removing
-REM the old package and doing a clean install.
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "try { Add-AppxPackage -Path '%MSIX%' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -ErrorAction Stop; exit 0 } catch { Write-Host 'In-place update failed; removing existing SimpMusic and reinstalling...'; Get-AppxPackage -Name 'Simpmusic' | Remove-AppxPackage -ErrorAction SilentlyContinue; try { Add-AppxPackage -Path '%MSIX%' -ForceApplicationShutdown -ErrorAction Stop; exit 0 } catch { Write-Host $_; exit 1 } }"
+echo [2/3] Installing/updating SimpMusic...
+set "APPINSTALLER=%~dp0simpmusic.appinstaller"
+if exist "%APPINSTALLER%" (
+    echo Registering with online update support ^(AppInstaller^)...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "try { Add-AppxPackage -AppInstallerFile '%APPINSTALLER%' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -ErrorAction Stop; exit 0 } catch { Write-Host 'AppInstaller registration failed, falling back to direct MSIX...'; try { Add-AppxPackage -Path '%MSIX%' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -ErrorAction Stop; exit 0 } catch { Write-Host $_; exit 1 } }"
+) else (
+    echo Installing MSIX package: "%MSIX%" ...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "try { Add-AppxPackage -Path '%MSIX%' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -ErrorAction Stop; exit 0 } catch { Write-Host 'In-place update failed; removing existing SimpMusic and reinstalling...'; Get-AppxPackage -Name 'Simpmusic' | Remove-AppxPackage -ErrorAction SilentlyContinue; try { Add-AppxPackage -Path '%MSIX%' -ForceApplicationShutdown -ErrorAction Stop; exit 0 } catch { Write-Host $_; exit 1 } }"
+)
 
 if %errorlevel% neq 0 (
     echo.

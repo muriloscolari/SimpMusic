@@ -104,9 +104,12 @@ jobs:
           cp scripts/windows/install.bat "$stage/"
           cp output/simpmusic.crt        "$stage/"
           cp "$msix"                      "$stage/"
+          if [ -f output/simpmusic.appinstaller ]; then
+            cp output/simpmusic.appinstaller "$stage/"
+          fi
           ( cd "$stage" && zip -q -j \
             "${GITHUB_WORKSPACE}/installers/SimpMusic-Windows-installer.zip" \
-            install.bat simpmusic.crt "$(basename "$msix")" )
+            * )
           rm -rf "$stage"
 
       - name: Prepare Release Assets
@@ -139,9 +142,16 @@ jobs:
             cp "$zsync" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage.zsync
           fi
 
-          # Windows offline installer zip
+          # Windows offline installer zip and MSIX / appinstaller
           if [ -f installers/SimpMusic-Windows-installer.zip ]; then
             cp installers/SimpMusic-Windows-installer.zip release_assets/SimpMusic-v${VERSION}-Windows-x64-installer.zip
+          fi
+          if [ -f output/simpmusic.appinstaller ]; then
+            cp output/simpmusic.appinstaller release_assets/simpmusic.appinstaller
+          fi
+          msix=$(ls output/simpmusic-*.x64.msix 2>/dev/null | head -1)
+          if [ -n "$msix" ]; then
+            cp "$msix" release_assets/
           fi
 
           echo "Assets staged for release:"

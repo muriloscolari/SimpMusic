@@ -10,7 +10,12 @@ actual object PlatformAppUpdater {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     actual val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
-    actual fun startUpdate(downloadUrl: String?, zsyncUrl: String?) {}
+    actual fun startUpdate(
+        downloadUrl: String?,
+        zsyncUrl: String?,
+        msixUrl: String?,
+        appInstallerUrl: String?,
+    ) {}
 
     actual fun restartApp() {}
 

@@ -17,6 +17,9 @@ actual object PlatformAppUpdater {
     private const val TAG = "AppUpdater"
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    private val isWindows: Boolean
+        get() = System.getProperty("os.name")?.lowercase()?.contains("windows") == true
+
     private val appImagePath: String?
         get() = System.getenv("APPIMAGE")?.takeIf { it.isNotBlank() }
 
@@ -24,14 +27,58 @@ actual object PlatformAppUpdater {
         get() = System.getenv("APPDIR")?.takeIf { it.isNotBlank() }
 
     actual val isSupported: Boolean
-        get() = !appImagePath.isNullOrBlank()
+        get() = isWindows || !appImagePath.isNullOrBlank()
 
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     actual val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
     private var targetExecutablePath: String? = null
+    private var downloadedMsixPath: String? = null
 
-    actual fun startUpdate(downloadUrl: String?, zsyncUrl: String?) {
+    actual fun startUpdate(
+        downloadUrl: String?,
+        zsyncUrl: String?,
+        msixUrl: String?,
+        appInstallerUrl: String?,
+    ) {
+        if (isWindows) {
+            startWindowsUpdate(msixUrl ?: downloadUrl, appInstallerUrl)
+        } else {
+            startLinuxAppImageUpdate(downloadUrl, zsyncUrl)
+        }
+    }
+
+    private fun startWindowsUpdate(msixUrl: String?, appInstallerUrl: String?) {
+        scope.launch {
+            try {
+                if (!msixUrl.isNullOrBlank()) {
+                    _updateState.value = UpdateState.Downloading(0.0f, "Baixando atualização do Windows (.msix)...")
+                    val tempDir = File(System.getProperty("java.io.tmpdir"))
+                    val targetFile = File(tempDir, "simpmusic-update.msix")
+                    downloadFileWithProgress(msixUrl, targetFile)
+                    downloadedMsixPath = targetFile.absolutePath
+                    _updateState.value = UpdateState.ReadyToRestart(targetFile.absolutePath)
+                } else if (!appInstallerUrl.isNullOrBlank()) {
+                    _updateState.value = UpdateState.Downloading(0.5f, "Disparando atualização via AppInstaller...")
+                    val psScript = "Add-AppxPackage -AppInstallerFile '$appInstallerUrl' -ForceApplicationShutdown"
+                    val process = ProcessBuilder("powershell", "-NoProfile", "-Command", psScript).start()
+                    val exit = process.waitFor()
+                    if (exit == 0) {
+                        _updateState.value = UpdateState.ReadyToRestart("appinstaller")
+                    } else {
+                        _updateState.value = UpdateState.Error("Falha ao atualizar via AppInstaller (código $exit).")
+                    }
+                } else {
+                    _updateState.value = UpdateState.Error("Nenhum pacote de instalação do Windows (.msix) foi encontrado nesta versão.")
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Windows update failed: ${e.message}")
+                _updateState.value = UpdateState.Error(e.message ?: "Erro ao atualizar no Windows.")
+            }
+        }
+    }
+
+    private fun startLinuxAppImageUpdate(downloadUrl: String?, zsyncUrl: String?) {
         val currentPath = appImagePath
         if (currentPath == null) {
             _updateState.value = UpdateState.Error("Não está sendo executado como AppImage.")
@@ -118,7 +165,6 @@ actual object PlatformAppUpdater {
 
             val exitCode = process.waitFor()
             if (exitCode == 0) {
-                // Find newly created AppImage
                 val currentFiles = parentDir.listFiles().orEmpty()
                 val newFile =
                     currentFiles.firstOrNull { it.isFile && it.name.endsWith(".AppImage") && it.name !in initialFiles }
@@ -138,19 +184,15 @@ actual object PlatformAppUpdater {
         }
     }
 
-    private fun runDirectDownload(downloadUrl: String, currentFile: File) {
-        val parentDir = currentFile.parentFile ?: File(".")
-        val targetFileName = downloadUrl.substringAfterLast('/').ifBlank { currentFile.name }
-        val tempFile = File(parentDir, "$targetFileName.download")
-
-        val url = URI(downloadUrl).toURL()
+    private fun downloadFileWithProgress(urlStr: String, destinationFile: File) {
+        val tempFile = File(destinationFile.parentFile, destinationFile.name + ".download")
+        val url = URI(urlStr).toURL()
         val connection = url.openConnection() as HttpURLConnection
         connection.instanceFollowRedirects = true
         connection.connect()
 
         if (connection.responseCode !in 200..299) {
-            _updateState.value = UpdateState.Error("Erro HTTP ao baixar: ${connection.responseCode} ${connection.responseMessage}")
-            return
+            throw IllegalStateException("Erro HTTP ${connection.responseCode}: ${connection.responseMessage}")
         }
 
         val totalLength = connection.contentLengthLong
@@ -175,25 +217,46 @@ actual object PlatformAppUpdater {
             }
         }
 
-        tempFile.setExecutable(true, false)
+        if (destinationFile.exists()) {
+            destinationFile.delete()
+        }
+        tempFile.renameTo(destinationFile)
+    }
 
+    private fun runDirectDownload(downloadUrl: String, currentFile: File) {
+        val parentDir = currentFile.parentFile ?: File(".")
+        val targetFileName = downloadUrl.substringAfterLast('/').ifBlank { currentFile.name }
         val destinationFile = File(parentDir, targetFileName)
+
+        downloadFileWithProgress(downloadUrl, destinationFile)
+        destinationFile.setExecutable(true, false)
+
         if (destinationFile.absolutePath != currentFile.absolutePath && currentFile.exists()) {
             currentFile.delete()
         }
-        if (tempFile.absolutePath != destinationFile.absolutePath) {
-            if (destinationFile.exists()) {
-                destinationFile.delete()
-            }
-            tempFile.renameTo(destinationFile)
-        }
 
-        destinationFile.setExecutable(true, false)
         targetExecutablePath = destinationFile.absolutePath
         _updateState.value = UpdateState.ReadyToRestart(destinationFile.absolutePath)
     }
 
     actual fun restartApp() {
+        if (isWindows) {
+            val msix = downloadedMsixPath
+            try {
+                if (msix != null && File(msix).exists()) {
+                    val psScript = "Start-Sleep -Milliseconds 800; Add-AppxPackage -Path '$msix' -ForceApplicationShutdown -ForceUpdateFromAnyVersion; start 'shell:appsFolder\\Simpmusic_ejp2bhxmz1qq6!Simpmusic'"
+                    ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript).start()
+                } else {
+                    val psScript = "Start-Sleep -Milliseconds 800; start 'shell:appsFolder\\Simpmusic_ejp2bhxmz1qq6!Simpmusic'"
+                    ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript).start()
+                }
+                exitProcess(0)
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to restart Windows app: ${e.message}")
+            }
+            return
+        }
+
         val path = targetExecutablePath ?: appImagePath ?: return
         try {
             ProcessBuilder(path).start()

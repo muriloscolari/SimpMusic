@@ -12,7 +12,12 @@ sealed interface UpdateState {
 expect object PlatformAppUpdater {
     val isSupported: Boolean
     val updateState: StateFlow<UpdateState>
-    fun startUpdate(downloadUrl: String? = null, zsyncUrl: String? = null)
+    fun startUpdate(
+        downloadUrl: String? = null,
+        zsyncUrl: String? = null,
+        msixUrl: String? = null,
+        appInstallerUrl: String? = null,
+    )
     fun restartApp()
     fun resetState()
 }
