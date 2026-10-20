@@ -465,10 +465,34 @@ tasks.register("packageConveyorAppImage") {
             appExecutable.setExecutable(true)
         }
 
-        val outputAppImage = appDir.parentFile.resolve("$appName-x86_64.AppImage")
+        // Bundle appimageupdatetool so the AppImage can self-update via zsync
+        val appimageupdatetool =
+            layout.buildDirectory
+                .dir("tmp")
+                .get()
+                .asFile
+                .resolve("appimageupdatetool-x86_64.AppImage")
+        if (!appimageupdatetool.exists()) {
+            downloadFile(
+                "https://github.com/AppImageCommunity/AppImageUpdate/releases/download/continuous/appimageupdatetool-x86_64.AppImage",
+                appimageupdatetool,
+            )
+        }
+        if (!appimageupdatetool.canExecute()) {
+            appimageupdatetool.setExecutable(true)
+        }
+        val appimageupdatetoolDst = appDir.resolve("bin/appimageupdatetool")
+        appimageupdatetoolDst.parentFile.mkdirs()
+        FileUtils.copyFile(appimageupdatetool, appimageupdatetoolDst)
+        appimageupdatetoolDst.setExecutable(true, false)
+
+        val outputAppImage = appDir.parentFile.resolve("$appName-v$versionName-Linux-x86_64.AppImage")
+        val updateInfo = "gh-releases-zsync|muriloscolari|SimpMusic|latest|SimpMusic-*-Linux-x86_64.AppImage.zsync"
         val process =
             ProcessBuilder(
                 appimagetool.canonicalPath,
+                "-u",
+                updateInfo,
                 "$appName.AppDir",
                 outputAppImage.name,
             ).directory(appDir.parentFile)

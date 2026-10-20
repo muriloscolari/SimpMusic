@@ -134,6 +134,10 @@ jobs:
           if [ -n "$appimage" ]; then
             cp "$appimage" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage
           fi
+          zsync=$(ls desktopApp/build/appimage/conveyor/SimpMusic-*.AppImage.zsync 2>/dev/null | head -1)
+          if [ -n "$zsync" ]; then
+            cp "$zsync" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage.zsync
+          fi
 
           # Windows offline installer zip
           if [ -f installers/SimpMusic-Windows-installer.zip ]; then

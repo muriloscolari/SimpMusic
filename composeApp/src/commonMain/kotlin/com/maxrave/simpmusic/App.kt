@@ -137,6 +137,19 @@ import simpmusic.composeapp.generated.resources.sleep_timer_off
 import simpmusic.composeapp.generated.resources.this_app_needs_to_access_your_notification
 import simpmusic.composeapp.generated.resources.this_link_is_not_supported
 import simpmusic.composeapp.generated.resources.unknown
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
+import com.maxrave.simpmusic.expect.PlatformAppUpdater
+import com.maxrave.simpmusic.expect.UpdateState
+import simpmusic.composeapp.generated.resources.checking
+import simpmusic.composeapp.generated.resources.error
+import simpmusic.composeapp.generated.resources.restart_later
+import simpmusic.composeapp.generated.resources.restart_now
+import simpmusic.composeapp.generated.resources.try_again
+import simpmusic.composeapp.generated.resources.update_now
+import simpmusic.composeapp.generated.resources.update_ready_message
+import simpmusic.composeapp.generated.resources.update_ready_title
 import simpmusic.composeapp.generated.resources.update_available
 import simpmusic.composeapp.generated.resources.update_message
 import simpmusic.composeapp.generated.resources.yes
@@ -481,7 +494,7 @@ fun App(
         }
     }
 
-    LaunchedEffect(updateData) {
+    LaunchedEffect(updateData, viewModel.showedUpdateDialog) {
         val response = updateData ?: return@LaunchedEffect
         // Only a NEWER release is offered. This used to compare the tags for inequality, which told a
         // build ahead of the latest release (dev, beta) to "update" back down to it, and told every
@@ -900,123 +913,234 @@ fun App(
 
                 if (shouldShowUpdateDialog) {
                     val response = updateData ?: return@Scaffold
+                    val updateState by PlatformAppUpdater.updateState.collectAsStateWithLifecycle()
+                    val isAppImageUpdater = PlatformAppUpdater.isSupported
+
                     AlertDialog(
                         properties =
                             DialogProperties(
-                                dismissOnBackPress = false,
-                                dismissOnClickOutside = false,
+                                dismissOnBackPress = updateState !is UpdateState.Downloading,
+                                dismissOnClickOutside = updateState !is UpdateState.Downloading,
                             ),
                         onDismissRequest = {
-                            shouldShowUpdateDialog = false
-                            viewModel.showedUpdateDialog = false
+                            if (updateState !is UpdateState.Downloading) {
+                                shouldShowUpdateDialog = false
+                                viewModel.showedUpdateDialog = false
+                                PlatformAppUpdater.resetState()
+                            }
                         },
                         confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    shouldShowUpdateDialog = false
-                                    viewModel.showedUpdateDialog = false
-                                    openUrl("https://github.com/muriloscolari/SimpMusic/releases/latest")
-                                },
-                            ) {
-                                Text(
-                                    stringResource(Res.string.download),
-                                    style = typo().bodySmall,
-                                )
+                            when (updateState) {
+                                is UpdateState.Downloading -> {}
+                                is UpdateState.ReadyToRestart -> {
+                                    Button(
+                                        onClick = { PlatformAppUpdater.restartApp() },
+                                    ) {
+                                        Text(
+                                            stringResource(Res.string.restart_now),
+                                            style = typo().bodySmall,
+                                        )
+                                    }
+                                }
+                                is UpdateState.Error -> {
+                                    Button(
+                                        onClick = {
+                                            PlatformAppUpdater.startUpdate(response.appImageUrl, response.zsyncUrl)
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(Res.string.try_again),
+                                            style = typo().bodySmall,
+                                        )
+                                    }
+                                }
+                                UpdateState.Idle -> {
+                                    if (isAppImageUpdater) {
+                                        Button(
+                                            onClick = {
+                                                PlatformAppUpdater.startUpdate(response.appImageUrl, response.zsyncUrl)
+                                            },
+                                        ) {
+                                            Text(
+                                                stringResource(Res.string.update_now),
+                                                style = typo().bodySmall,
+                                            )
+                                        }
+                                    } else {
+                                        TextButton(
+                                            onClick = {
+                                                shouldShowUpdateDialog = false
+                                                viewModel.showedUpdateDialog = false
+                                                openUrl("https://github.com/muriloscolari/SimpMusic/releases/latest")
+                                            },
+                                        ) {
+                                            Text(
+                                                stringResource(Res.string.download),
+                                                style = typo().bodySmall,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         },
                         dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    shouldShowUpdateDialog = false
-                                    viewModel.showedUpdateDialog = false
-                                },
-                            ) {
-                                Text(
-                                    stringResource(Res.string.cancel),
-                                    style = typo().bodySmall,
-                                )
+                            when (updateState) {
+                                is UpdateState.Downloading -> {}
+                                is UpdateState.ReadyToRestart -> {
+                                    TextButton(
+                                        onClick = {
+                                            shouldShowUpdateDialog = false
+                                            viewModel.showedUpdateDialog = false
+                                            PlatformAppUpdater.resetState()
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(Res.string.restart_later),
+                                            style = typo().bodySmall,
+                                        )
+                                    }
+                                }
+                                is UpdateState.Error -> {
+                                    TextButton(
+                                        onClick = {
+                                            shouldShowUpdateDialog = false
+                                            viewModel.showedUpdateDialog = false
+                                            PlatformAppUpdater.resetState()
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(Res.string.cancel),
+                                            style = typo().bodySmall,
+                                        )
+                                    }
+                                }
+                                UpdateState.Idle -> {
+                                    TextButton(
+                                        onClick = {
+                                            shouldShowUpdateDialog = false
+                                            viewModel.showedUpdateDialog = false
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(Res.string.cancel),
+                                            style = typo().bodySmall,
+                                        )
+                                    }
+                                }
                             }
                         },
                         title = {
                             Text(
-                                stringResource(Res.string.update_available),
-                                style = typo().labelSmall,
+                                text =
+                                    when (updateState) {
+                                        is UpdateState.ReadyToRestart -> stringResource(Res.string.update_ready_title)
+                                        is UpdateState.Error -> stringResource(Res.string.error)
+                                        else -> stringResource(Res.string.update_available)
+                                    },
+                                style = typo().titleSmall,
                             )
                         },
                         text = {
-                            val formatted =
-                                response.releaseTime?.let { input ->
-                                    try {
-                                        val instant = kotlin.time.Instant.parse(input)
-                                        val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                                        dateTime.format(
-                                            LocalDateTime.Format {
-                                                day()
-                                                char(' ')
-                                                monthName(MonthNames.ENGLISH_ABBREVIATED)
-                                                char(' ')
-                                                year()
-                                                char(' ')
-                                                hour()
-                                                char(':')
-                                                minute()
-                                                char(':')
-                                                second()
-                                            },
-                                        )
-                                    } catch (e: Exception) {
-                                        stringResource(Res.string.unknown)
-                                    }
-                                } ?: stringResource(Res.string.unknown)
-
-                            val updateMessage =
-                                runBlocking {
-                                    getString(
-                                        Res.string.update_message,
-                                        response.tagName,
-                                        formatted,
-                                        // values-iw/values-in still carry an old %3$s; Compose Resources indexes
-                                        // args without a bounds check, so omitting it crashes the dialog
-                                        "",
-                                    )
-                                }
                             Column(
-                                Modifier
-                                    .heightIn(
-                                        max = 400.dp,
-                                    ).verticalScroll(
-                                        rememberScrollState(),
-                                    ),
+                                modifier =
+                                    Modifier
+                                        .heightIn(max = 400.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text(
-                                    text = updateMessage,
-                                    style = typo().labelMedium,
-                                    modifier =
-                                        Modifier.padding(
-                                            vertical = 8.dp,
-                                        ),
-                                )
-                                Markdown(
-                                    response.body,
-                                    typography =
-                                        markdownTypography(
-                                            h1 = typo().labelLarge,
-                                            h2 = typo().labelMedium,
-                                            h3 = typo().labelSmall,
-                                            text = typo().bodySmall,
-                                            bullet = typo().bodySmall,
-                                            paragraph = typo().bodySmall,
-                                            textLink =
-                                                TextLinkStyles(
-                                                    SpanStyle(
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Normal,
-                                                        fontFamily = fontFamily(),
-                                                        textDecoration = TextDecoration.Underline,
-                                                    ),
+                                when (val state = updateState) {
+                                    is UpdateState.Downloading -> {
+                                        Text(
+                                            text = state.message.ifBlank { stringResource(Res.string.checking) },
+                                            style = typo().bodyMedium,
+                                        )
+                                        if (state.progress > 0f) {
+                                            LinearProgressIndicator(
+                                                progress = { state.progress },
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                            )
+                                        } else {
+                                            LinearProgressIndicator(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                            )
+                                        }
+                                    }
+                                    is UpdateState.ReadyToRestart -> {
+                                        Text(
+                                            text = stringResource(Res.string.update_ready_message),
+                                            style = typo().bodyMedium,
+                                        )
+                                    }
+                                    is UpdateState.Error -> {
+                                        Text(
+                                            text = state.message,
+                                            style = typo().bodyMedium,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                    UpdateState.Idle -> {
+                                        val formatted =
+                                            response.releaseTime?.let { input ->
+                                                try {
+                                                    val instant = kotlin.time.Instant.parse(input)
+                                                    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                                                    dateTime.format(
+                                                        LocalDateTime.Format {
+                                                            day()
+                                                            char(' ')
+                                                            monthName(MonthNames.ENGLISH_ABBREVIATED)
+                                                            char(' ')
+                                                            year()
+                                                            char(' ')
+                                                            hour()
+                                                            char(':')
+                                                            minute()
+                                                            char(':')
+                                                            second()
+                                                        },
+                                                    )
+                                                } catch (e: Exception) {
+                                                    stringResource(Res.string.unknown)
+                                                }
+                                            } ?: stringResource(Res.string.unknown)
+
+                                        val updateMessage =
+                                            runBlocking {
+                                                getString(
+                                                    Res.string.update_message,
+                                                    response.tagName,
+                                                    formatted,
+                                                    "",
+                                                )
+                                            }
+                                        Text(
+                                            text = updateMessage,
+                                            style = typo().labelMedium,
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                        )
+                                        Markdown(
+                                            response.body,
+                                            typography =
+                                                markdownTypography(
+                                                    h1 = typo().labelLarge,
+                                                    h2 = typo().labelMedium,
+                                                    h3 = typo().labelSmall,
+                                                    text = typo().bodySmall,
+                                                    bullet = typo().bodySmall,
+                                                    paragraph = typo().bodySmall,
+                                                    textLink =
+                                                        TextLinkStyles(
+                                                            SpanStyle(
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Normal,
+                                                                fontFamily = fontFamily(),
+                                                                textDecoration = TextDecoration.Underline,
+                                                            ),
+                                                        ),
                                                 ),
-                                        ),
-                                )
+                                        )
+                                    }
+                                }
                             }
                         },
                     )

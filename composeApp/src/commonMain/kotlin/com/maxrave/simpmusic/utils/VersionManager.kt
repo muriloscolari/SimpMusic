@@ -18,6 +18,13 @@ object VersionManager {
 
     fun getVersionName(): String = removeDevSuffix(versionName ?: String())
 
+    fun getGitCommitHash(): String =
+        try {
+            BuildKonfig.gitCommitHash
+        } catch (_: Exception) {
+            ""
+        }
+
     /** True when [tag] names a release newer than this build. */
     fun isBehind(tag: String): Boolean = isNewerRelease(current = getVersionName(), tag = tag)
 
@@ -40,8 +47,22 @@ internal fun isNewerRelease(
     current: String,
     tag: String,
 ): Boolean {
-    val release = tag.trim().removePrefix("v")
-    return release != current && compareVersions(current, release) <= 0
+    val cleanTag = tag.trim().removePrefix("custom-").removePrefix("v")
+    val cleanCurrent = current.trim().removePrefix("custom-").removePrefix("v")
+
+    val commitHash = VersionManager.getGitCommitHash()
+    if (commitHash.isNotEmpty() && tag.contains(commitHash)) {
+        return false
+    }
+
+    val versionComparison = compareVersions(cleanCurrent, cleanTag)
+    if (versionComparison < 0) return true
+    if (versionComparison == 0) {
+        if (tag.startsWith("custom-v") && commitHash.isNotEmpty() && !tag.endsWith(commitHash)) {
+            return true
+        }
+    }
+    return false
 }
 
 /** Dotted versions compared number by number, so "2.10.0" is newer than "2.9.0". A suffix such as "-hf" is ignored. */

@@ -828,6 +828,11 @@ val mpvSetupAll by tasks.registering {
     }
 }
 
+val gitCommitHashProvider =
+    providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+    }.standardOutput.asText.map { it.trim() }.orElse("")
+
 buildkonfig {
     packageName = "com.maxrave.simpmusic"
     exposeObjectWithName = "BuildKonfig"
@@ -841,6 +846,7 @@ buildkonfig {
                 .toInt()
         buildConfigField(STRING, "versionName", versionName)
         buildConfigField(INT, "versionCode", "$versionCode")
+        buildConfigField(STRING, "gitCommitHash", gitCommitHashProvider.get())
 
         if (isFullBuild) {
             try {

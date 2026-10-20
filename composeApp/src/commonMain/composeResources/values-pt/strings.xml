@@ -181,6 +181,12 @@
     <string name="save_last_played_track_and_queue">Salvar a última faixa e fila reproduzidas</string>
     <string name="update_available">Nova atualização disponível</string>
     <string name="update_message"></string>
+    <string name="update_now">Atualizar agora</string>
+    <string name="update_ready_title">Atualização pronta</string>
+    <string name="update_ready_message">Atualização baixada com sucesso! Deseja reiniciar agora para aplicar?</string>
+    <string name="restart_now">Reiniciar agora</string>
+    <string name="restart_later">Depois</string>
+    <string name="try_again">Tentar novamente</string>
     <string name="check_for_update">Verificar atualizações</string>
     <string name="last_checked_at">Última verificação: %1$s</string>
     <string name="checking">Verificando</string>
