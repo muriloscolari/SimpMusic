@@ -96,9 +96,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import com.maxrave.simpmusic.ui.icon.Computer
+import com.maxrave.simpmusic.ui.icon.Smartphone
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -495,11 +498,6 @@ fun MiniPlayer(
                                             .wrapContentHeight()
                                             .align(Alignment.CenterVertically),
                                     ) {
-                                        SimpConnectRemoteBadge(
-                                            activeRemoteDevice = activeRemoteDevice,
-                                            onClick = { showSimpConnectSheet = true },
-                                            modifier = Modifier.padding(bottom = 2.dp),
-                                        )
                                         Text(
                                             text = (songEntity?.title ?: "").toString(),
                                             style = if (isFlat) typo().titleSmall else typo().labelSmall,
@@ -521,8 +519,25 @@ fun MiniPlayer(
                                                     modifier =
                                                         Modifier
                                                             .size(20.dp)
-                                                            .padding(end = 4.dp)
-                                                            .weight(1f),
+                                                            .padding(end = 4.dp),
+                                                )
+                                            }
+                                            if (activeRemoteDevice != null) {
+                                                Icon(
+                                                    imageVector = when (activeRemoteDevice?.platform) {
+                                                        "desktop" -> SimpIcons.Computer
+                                                        "android", "ios", "mobile" -> SimpIcons.Smartphone
+                                                        else -> SimpIcons.Devices
+                                                    },
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF1DB954),
+                                                    modifier = Modifier.size(13.dp).padding(end = 3.dp),
+                                                )
+                                                Text(
+                                                    text = "${activeRemoteDevice?.deviceName} • ",
+                                                    style = if (isFlat) typo().bodySmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold) else typo().bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = Color(0xFF1DB954),
+                                                    maxLines = 1,
                                                 )
                                             }
                                             Text(

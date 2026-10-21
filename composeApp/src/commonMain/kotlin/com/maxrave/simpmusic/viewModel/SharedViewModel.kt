@@ -178,21 +178,13 @@ class SharedViewModel(
     fun connectSimpConnectDevice(device: com.maxrave.domain.data.model.simpconnect.DiscoveredDeviceDomain) {
         val active = simpConnectActiveRemoteDevice.value
         if (active != null) {
-            // Already controlling a device: move the session instead of dropping the old one,
-            // which kept playing in the background while the UI attached to the new target.
+            // Already controlling a device: move the session instead of dropping the old one.
             if (active.deviceId != device.deviceId) {
                 simpConnectRepository.transferToDevice(device)
             }
             return
         }
-        // A paused session is still a session: move it too, keeping the paused state.
-        val hasLocalSession = mediaPlayerHandler.nowPlaying.value != null &&
-            mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
-        if (hasLocalSession) {
-            simpConnectRepository.handoffToRemote(device)
-        } else {
-            simpConnectRepository.connectToDevice(device)
-        }
+        simpConnectRepository.connectToDevice(device)
     }
 
     fun disconnectSimpConnect() = simpConnectRepository.disconnect()

@@ -3,13 +3,17 @@ package com.maxrave.simpmusic.viewModel.base
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.Config
+import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.model.browse.album.Track
+import com.maxrave.domain.data.model.simpconnect.TrackSummaryDomain
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
+import com.maxrave.domain.repository.SimpConnectRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.Resource
+import com.maxrave.domain.utils.connectArtists
 import com.maxrave.domain.utils.isRadioQueueId
 import com.maxrave.logger.LogLevel
 import com.maxrave.logger.Logger
@@ -34,6 +38,7 @@ abstract class BaseViewModel :
     ViewModel(),
     KoinComponent {
     protected val mediaPlayerHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
+    protected val simpConnectRepo: SimpConnectRepository by inject<SimpConnectRepository>()
     private val _nowPlayingVideoId: MutableStateFlow<String> = MutableStateFlow("")
 
     /**
@@ -119,7 +124,9 @@ abstract class BaseViewModel :
      * Communicate with SimpleMediaServiceHandler to load media item
      */
     fun setQueueData(queueData: QueueData.Data) {
-        mediaPlayerHandler.reset()
+        if (simpConnectRepo.activeRemoteDevice.value == null) {
+            mediaPlayerHandler.reset()
+        }
         mediaPlayerHandler.setQueueData(queueData)
     }
 
@@ -128,6 +135,35 @@ abstract class BaseViewModel :
         type: String,
         index: Int? = null,
     ) {
+        val remoteDevice = simpConnectRepo.activeRemoteDevice.value
+        if (remoteDevice != null) {
+            val trackDomain: TrackSummaryDomain? =
+                when (anyTrack) {
+                    is Track -> anyTrack.toTrackSummaryDomain()
+                    is SongEntity -> anyTrack.toTrackSummaryDomain()
+                    else -> null
+                }
+            if (trackDomain != null) {
+                viewModelScope.launch {
+                    val rawQueue = mediaPlayerHandler.queueData.value?.data?.listTracks.orEmpty()
+                    val queue = rawQueue.map { it.toTrackSummaryDomain() }
+                    val targetIndex =
+                        if (index != null && index in queue.indices) {
+                            index
+                        } else {
+                            val found = queue.indexOfFirst { it.videoId == trackDomain.videoId }
+                            if (found >= 0) found else 0
+                        }
+                    simpConnectRepo.sendPlayTrack(
+                        videoId = trackDomain.videoId,
+                        queue = if (queue.isNotEmpty()) queue else listOf(trackDomain),
+                        startIndex = targetIndex,
+                        playWhenReady = true,
+                    )
+                }
+                return
+            }
+        }
         viewModelScope.launch {
             mediaPlayerHandler.loadMediaItem(
                 anyTrack = anyTrack,
@@ -138,6 +174,24 @@ abstract class BaseViewModel :
     }
 
     fun shufflePlaylist(firstPlayIndex: Int = 0) {
+        val remoteDevice = simpConnectRepo.activeRemoteDevice.value
+        if (remoteDevice != null) {
+            viewModelScope.launch {
+                val rawQueue = mediaPlayerHandler.queueData.value?.data?.listTracks.orEmpty()
+                if (rawQueue.isNotEmpty()) {
+                    simpConnectRepo.sendSetShuffle(true)
+                    val queue = rawQueue.map { it.toTrackSummaryDomain() }
+                    val targetIndex = firstPlayIndex.coerceIn(0, queue.lastIndex)
+                    simpConnectRepo.sendPlayTrack(
+                        videoId = queue[targetIndex].videoId,
+                        queue = queue,
+                        startIndex = targetIndex,
+                        playWhenReady = true,
+                    )
+                }
+            }
+            return
+        }
         mediaPlayerHandler.shufflePlaylist(firstPlayIndex)
     }
 
@@ -175,3 +229,23 @@ abstract class BaseViewModel :
         }
     }
 }
+
+private fun Track.toTrackSummaryDomain(): TrackSummaryDomain =
+    TrackSummaryDomain(
+        videoId = videoId,
+        title = title,
+        artist = artists?.mapNotNull { it.name }?.joinToString(", ").orEmpty(),
+        album = album?.name,
+        artworkUri = thumbnails?.lastOrNull()?.url,
+        durationMs = (durationSeconds ?: 0L).toLong() * 1000L,
+    )
+
+private fun SongEntity.toTrackSummaryDomain(): TrackSummaryDomain =
+    TrackSummaryDomain(
+        videoId = videoId,
+        title = title,
+        artist = artistName?.connectArtists().orEmpty(),
+        album = albumName,
+        artworkUri = thumbnails,
+        durationMs = (durationSeconds.takeIf { it > 0 } ?: 0).toLong() * 1000L,
+    )
