@@ -16,18 +16,11 @@ plugins {
 android {
     val abis = arrayOf("armeabi-v7a", "arm64-v8a", "x86_64")
 
-    // Google Play only runs Car App Library apps on real cars when they come from a
-    // trusted installer. A sideloaded APK therefore falls back to the legacy
-    // MediaBrowserService UI. Use this property to publish a fork under a package you
-    // own and install it through Internal App Sharing / an internal test track:
-    //   ./gradlew :androidApp:bundleRelease -PsimpmusicApplicationId=com.example.simpmusic
-    val playApplicationId = providers.gradleProperty("simpmusicApplicationId").orNull
-
     namespace = "com.maxrave.simpmusic"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = playApplicationId ?: "com.maxrave.simpmusic"
+        applicationId = "com.maxrave.simpmusic"
         minSdk = 26
         targetSdk = 36
         versionCode =
