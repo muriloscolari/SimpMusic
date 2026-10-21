@@ -47,3 +47,6 @@ sentry.properties
 /desktopApp/generated.conveyor.conf
 # Conveyor output directory
 /output/
+/installers/
+/release_assets/
+release_notes.md
