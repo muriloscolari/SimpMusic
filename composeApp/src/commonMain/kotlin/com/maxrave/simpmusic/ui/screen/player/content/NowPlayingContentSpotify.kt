@@ -68,6 +68,11 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
+import com.maxrave.simpmusic.viewModel.SharedViewModel
+import com.maxrave.simpmusic.ui.icon.Devices
+import com.maxrave.simpmusic.ui.component.SimpConnectDevicePickerBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -213,6 +218,16 @@ fun NowPlayingContentSpotify(
     var showShareLyricsSheet by rememberSaveable { mutableStateOf(false) }
     var showLyricsOffsetBar by rememberSaveable { mutableStateOf(false) }
     var showOutputSheet by rememberSaveable { mutableStateOf(false) }
+    var showSimpConnectSheet by rememberSaveable { mutableStateOf(false) }
+    val sharedViewModel: SharedViewModel = koinInject()
+    val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
+
+    if (showSimpConnectSheet) {
+        SimpConnectDevicePickerBottomSheet(
+            onDismiss = { showSimpConnectSheet = false },
+            sharedViewModel = sharedViewModel,
+        )
+    }
 
     // Height
     var topAppBarHeightDp by rememberSaveable {
@@ -1099,6 +1114,30 @@ fun NowPlayingContentSpotify(
                                                         color = Color.Cyan,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                }
+                                                IconButton(
+                                                    modifier =
+                                                        Modifier
+                                                            .size(24.dp)
+                                                            .aspectRatio(1f)
+                                                            .clip(CircleShape),
+                                                    onClick = { showSimpConnectSheet = true },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = SimpIcons.Devices,
+                                                        tint = if (activeRemoteDevice != null) Color(0xFF1DB954) else Color.White,
+                                                        contentDescription = "SimpConnect Devices",
+                                                    )
+                                                }
+                                                AnimatedVisibility(visible = activeRemoteDevice != null) {
+                                                    Text(
+                                                        text = "Controlando: ${activeRemoteDevice?.deviceName}",
+                                                        style = typo().bodySmall,
+                                                        color = Color(0xFF1DB954),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.clickable { showSimpConnectSheet = true },
                                                     )
                                                 }
                                             }

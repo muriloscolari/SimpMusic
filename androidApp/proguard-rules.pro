@@ -21,6 +21,13 @@
 #-renamesourcefileattribute SourceFile
 -keep class kotlinx.coroutines.CoroutineExceptionHandler
 -keep class kotlinx.coroutines.internal.MainDispatcherFactory
+
+# Ktor CIO / utils debug detector referencing JVM management classes
+-dontwarn java.lang.management.**
+-dontwarn io.ktor.util.debug.**
+-dontwarn io.ktor.server.**
+-dontwarn io.ktor.network.**
+
 # Keep `Companion` object fields of serializable classes.
 # This avoids serializer lookup through `getDeclaredClasses` as done for named companion objects.
 -if @kotlinx.serialization.Serializable class **

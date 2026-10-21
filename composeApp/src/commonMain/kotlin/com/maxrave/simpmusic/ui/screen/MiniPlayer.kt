@@ -128,10 +128,13 @@ import com.maxrave.simpmusic.ui.component.HeartCheckBox
 import com.maxrave.simpmusic.ui.component.PlayPauseButton
 import com.maxrave.simpmusic.ui.component.PlayerControlLayout
 import com.maxrave.simpmusic.ui.component.QueueBottomSheet
+import com.maxrave.simpmusic.ui.component.SimpConnectDevicePickerBottomSheet
+import com.maxrave.simpmusic.ui.component.SimpConnectRemoteBadge
 import com.maxrave.simpmusic.ui.component.liquidGlass
 import com.maxrave.simpmusic.ui.component.rememberGlassLuminance
 import com.maxrave.simpmusic.ui.component.rememberHolderPainter
 import com.maxrave.simpmusic.ui.icon.Close
+import com.maxrave.simpmusic.ui.icon.Devices
 import com.maxrave.simpmusic.ui.icon.Headphones
 import com.maxrave.simpmusic.ui.icon.OpenInFull
 import com.maxrave.simpmusic.ui.icon.PictureInPictureAlt
@@ -234,6 +237,18 @@ fun MiniPlayer(
 
     var loading by rememberSaveable {
         mutableStateOf(true)
+    }
+
+    val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
+    var showSimpConnectSheet by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showSimpConnectSheet) {
+        SimpConnectDevicePickerBottomSheet(
+            onDismiss = { showSimpConnectSheet = false },
+            sharedViewModel = sharedViewModel,
+        )
     }
 
     LaunchedEffect(key1 = true) {
@@ -480,6 +495,11 @@ fun MiniPlayer(
                                             .wrapContentHeight()
                                             .align(Alignment.CenterVertically),
                                     ) {
+                                        SimpConnectRemoteBadge(
+                                            activeRemoteDevice = activeRemoteDevice,
+                                            onClick = { showSimpConnectSheet = true },
+                                            modifier = Modifier.padding(bottom = 2.dp),
+                                        )
                                         Text(
                                             text = (songEntity?.title ?: "").toString(),
                                             style = if (isFlat) typo().titleSmall else typo().labelSmall,
@@ -544,6 +564,29 @@ fun MiniPlayer(
                     ) {
                         HeartCheckBox(checked = liked, size = 30, tint = textColor) {
                             sharedViewModel.onUIEvent(UIEvent.ToggleLike)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(if (isFlat) 4.dp else 8.dp))
+                    Box(
+                        modifier =
+                            if (isFlat) {
+                                Modifier
+                                    .size(controlSize)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                            } else {
+                                Modifier
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        IconButton(
+                            onClick = { showSimpConnectSheet = true },
+                        ) {
+                            Icon(
+                                imageVector = SimpIcons.Devices,
+                                tint = if (activeRemoteDevice != null) Color(0xFF1DB954) else textColor,
+                                contentDescription = "SimpConnect Devices",
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.width(if (isFlat) 8.dp else 15.dp))
@@ -1048,6 +1091,17 @@ fun MiniPlayer(
                             imageVector = SimpIcons.QueueMusic,
                             tint = textColor,
                             contentDescription = "",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            showSimpConnectSheet = true
+                        },
+                    ) {
+                        Icon(
+                            imageVector = SimpIcons.Devices,
+                            tint = if (activeRemoteDevice != null) Color(0xFF1DB954) else textColor,
+                            contentDescription = "SimpConnect Devices",
                         )
                     }
                     // Desktop mini player button (JVM only)

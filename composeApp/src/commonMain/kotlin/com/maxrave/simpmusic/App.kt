@@ -1238,6 +1238,7 @@ fun App(
                         },
                     )
                 }
+                com.maxrave.simpmusic.ui.component.SimpConnectAuthDialog(sharedViewModel = viewModel)
             },
         )
     }

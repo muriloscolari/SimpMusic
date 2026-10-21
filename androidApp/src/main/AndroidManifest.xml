@@ -22,6 +22,8 @@
          Android 17 (API 37) and up, where it is a runtime permission; LoginSync.android.kt asks
          for it then. Declared now so a targetSdk bump cannot make the connection silently time out. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- SimpConnect P2P Discovery: UDP broadcast/multicast packets on Wi-Fi -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <uses-feature
         android:name="android.hardware.type.automotive"

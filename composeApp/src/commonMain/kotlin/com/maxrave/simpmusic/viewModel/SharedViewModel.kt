@@ -151,6 +151,19 @@ class SharedViewModel(
     var showedUpdateDialog: Boolean = false
 
     private val appIdentity: AppIdentity by inject()
+    val simpConnectRepository: com.maxrave.domain.repository.SimpConnectRepository by inject()
+
+    val simpConnectDiscoveredDevices = simpConnectRepository.discoveredDevices
+    val simpConnectLocalDevice = simpConnectRepository.localDevice
+    val simpConnectActiveRemoteDevice = simpConnectRepository.activeRemoteDevice
+    val simpConnectRemotePlaybackState = simpConnectRepository.remotePlaybackState
+    val simpConnectStatus = simpConnectRepository.connectionStatus
+    val simpConnectIncomingAuthRequest = simpConnectRepository.incomingAuthRequest
+
+    fun refreshSimpConnectDevices() = simpConnectRepository.refreshDiscovery()
+    fun connectSimpConnectDevice(device: com.maxrave.domain.data.model.simpconnect.DiscoveredDeviceDomain) = simpConnectRepository.connectToDevice(device)
+    fun disconnectSimpConnect() = simpConnectRepository.disconnect()
+    fun requestSimpConnectHandoff() = simpConnectRepository.requestHandoff()
 
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate
@@ -937,6 +950,13 @@ class SharedViewModel(
         index: Int? = null,
     ) {
         viewModelScope.launch {
+            if (simpConnectActiveRemoteDevice.value != null) {
+                simpConnectRepository.sendPlayTrack(
+                    videoId = track.videoId,
+                    startIndex = index ?: 0,
+                )
+                return@launch
+            }
             mediaPlayerHandler.clearMediaItems()
             songRepository.insertSong(track.toSongEntity()).lastOrNull()?.let {
                 println("insertSong: $it")
@@ -997,6 +1017,31 @@ class SharedViewModel(
 
     fun onUIEvent(uiEvent: UIEvent) =
         viewModelScope.launch {
+            if (simpConnectActiveRemoteDevice.value != null) {
+                when (uiEvent) {
+                    UIEvent.PlayPause -> simpConnectRepository.sendPlayPause()
+                    UIEvent.Next -> simpConnectRepository.sendNext()
+                    UIEvent.Previous -> simpConnectRepository.sendPrevious()
+                    UIEvent.SkipToPrevious -> simpConnectRepository.sendPrevious()
+                    is UIEvent.UpdateProgress -> {
+                        val duration = simpConnectRemotePlaybackState.value?.durationMs ?: 0L
+                        if (duration > 0L) {
+                            simpConnectRepository.sendSeekTo((uiEvent.newProgress * duration).toLong())
+                        }
+                    }
+                    is UIEvent.UpdateVolume -> simpConnectRepository.sendSetVolume(uiEvent.newVolume)
+                    UIEvent.Shuffle -> {
+                        val current = simpConnectRemotePlaybackState.value?.isShuffle ?: false
+                        simpConnectRepository.sendSetShuffle(!current)
+                    }
+                    UIEvent.Repeat -> {
+                        val current = simpConnectRemotePlaybackState.value?.repeatMode ?: 0
+                        simpConnectRepository.sendSetRepeat((current + 1) % 3)
+                    }
+                    else -> {}
+                }
+                return@launch
+            }
             when (uiEvent) {
                 UIEvent.Backward -> {
                     mediaPlayerHandler.onPlayerEvent(
