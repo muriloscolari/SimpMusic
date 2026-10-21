@@ -1280,7 +1280,11 @@ class SharedViewModel(
         viewModelScope.launch {
             if (simpConnectActiveRemoteDevice.value != null) {
                 when (uiEvent) {
-                    UIEvent.PlayPause -> simpConnectRepository.sendPlayPause()
+                    UIEvent.PlayPause -> {
+                        // Optimistic: flip the button now; the target's next StateSync confirms it.
+                        _controllerState.update { it.copy(isPlaying = !it.isPlaying) }
+                        simpConnectRepository.sendPlayPause()
+                    }
                     UIEvent.Next -> simpConnectRepository.sendNext()
                     UIEvent.Previous -> simpConnectRepository.sendPrevious()
                     UIEvent.SkipToPrevious -> simpConnectRepository.sendPrevious()
@@ -1302,7 +1306,7 @@ class SharedViewModel(
                             ?: remote?.track?.durationMs
                             ?: 0L
                         if (duration > 0L) {
-                            simpConnectRepository.sendSeekTo((uiEvent.newProgress * duration).toLong())
+                            simpConnectRepository.sendSeekTo((duration * uiEvent.newProgress / 100f).toLong().coerceIn(0L, duration))
                         }
                     }
                     is UIEvent.UpdateVolume -> simpConnectRepository.sendSetVolume(uiEvent.newVolume)
