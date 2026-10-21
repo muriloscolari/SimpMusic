@@ -272,7 +272,7 @@
 
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
-            android:value="1" />
+            android:value="8" />
 
         <service
             android:name="com.maxrave.media3.carapp.SimpMusicCarAppService"
