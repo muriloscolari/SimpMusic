@@ -83,6 +83,11 @@ import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import com.maxrave.domain.data.model.searchResult.songs.Artist
+import com.maxrave.domain.data.model.searchResult.songs.Album
+import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -235,8 +240,12 @@ class SharedViewModel(
     val nowPlayingState: StateFlow<NowPlayingTrackState?> = _nowPlayingState
 
     fun isCurrentlyPlaying(): Boolean =
-        mediaPlayerHandler.controlState.value.isPlaying &&
-            mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
+        if (simpConnectActiveRemoteDevice.value != null) {
+            simpConnectRemotePlaybackState.value?.isPlaying == true
+        } else {
+            mediaPlayerHandler.controlState.value.isPlaying &&
+                mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
+        }
 
     fun getQueueDataState() = mediaPlayerHandler.queueData
 
@@ -408,6 +417,7 @@ class SharedViewModel(
                 .distinctUntilChangedBy {
                     it.songEntity?.videoId
                 }.collectLatest { state ->
+                    if (simpConnectActiveRemoteDevice.value != null) return@collectLatest
                     canvasJob?.cancel()
                     _nowPlayingState.value = state
 
@@ -484,6 +494,7 @@ class SharedViewModel(
             val job1 =
                 launch {
                     mediaPlayerHandler.simpleMediaState.collect { mediaState ->
+                        if (simpConnectActiveRemoteDevice.value != null) return@collect
                         when (mediaState) {
                             is SimpleMediaState.Buffering -> {
                                 _timeline.update {
@@ -579,6 +590,7 @@ class SharedViewModel(
                 launch {
                     Logger.w(tag, "ControllerJob is running")
                     mediaPlayerHandler.controlState.collectLatest {
+                        if (simpConnectActiveRemoteDevice.value != null) return@collectLatest
                         Logger.w(tag, "ControlState is $it")
                         _controllerState.value = it
                         // Propagate crossfade state to timeline so UI can react
@@ -596,6 +608,7 @@ class SharedViewModel(
             val playlistNameJob =
                 launch {
                     mediaPlayerHandler.queueData.collectLatest { queue ->
+                        if (simpConnectActiveRemoteDevice.value != null) return@collectLatest
                         _nowPlayingScreenData.update {
                             it.copy(
                                 playlistName = queue?.data?.playlistName ?: "",
@@ -618,6 +631,102 @@ class SharedViewModel(
             sleepTimerJob.join()
             playlistNameJob.join()
             liveStreamJob.join()
+        }
+
+        // SimpConnect Remote Playback Synchronization
+        viewModelScope.launch {
+            var interpolatorJob: Job? = null
+            combine(simpConnectActiveRemoteDevice, simpConnectRemotePlaybackState) { device, remote ->
+                Pair(device, remote)
+            }.collectLatest { (device, remote) ->
+                interpolatorJob?.cancel()
+                if (device == null || remote == null) {
+                    // Restored to local playback when remote is disconnected
+                    _controllerState.value = mediaPlayerHandler.controlState.value
+                    _nowPlayingState.value = mediaPlayerHandler.nowPlayingState.value
+                    val dur = mediaPlayerHandler.getPlayerDuration()
+                    val pos = mediaPlayerHandler.getProgress()
+                    _timeline.update { it.copy(current = pos, total = dur, loading = false) }
+                    return@collectLatest
+                }
+
+                // 1. Controller State
+                _controllerState.value = ControlState(
+                    isPlaying = remote.isPlaying,
+                    isShuffle = remote.isShuffle,
+                    repeatState = when (remote.repeatMode) {
+                        1 -> RepeatState.All
+                        2 -> RepeatState.One
+                        else -> RepeatState.None
+                    },
+                    volume = remote.volume,
+                    isLiked = false,
+                    isNextAvailable = true,
+                    isPreviousAvailable = true,
+                    isCrossfading = false,
+                )
+
+                // 2. Track & Screen Data
+                val remoteTrack = remote.track
+                if (remoteTrack != null) {
+                    val track = Track(
+                        album = remoteTrack.album?.let { Album(name = it, id = "") },
+                        artists = listOf(Artist(name = remoteTrack.artist, id = null)),
+                        duration = null,
+                        durationSeconds = (remoteTrack.durationMs / 1000).toInt(),
+                        isAvailable = true,
+                        isExplicit = false,
+                        likeStatus = null,
+                        thumbnails = remoteTrack.artworkUri?.let { listOf(Thumbnail(url = it, width = 500, height = 500)) },
+                        title = remoteTrack.title,
+                        videoId = remoteTrack.videoId,
+                        videoType = null,
+                        category = null,
+                        feedbackTokens = null,
+                        resultType = null,
+                    )
+                    _nowPlayingState.value = NowPlayingTrackState(
+                        mediaItem = track.toGenericMediaItem(),
+                        track = track,
+                        songEntity = track.toSongEntity(),
+                    )
+                    _nowPlayingScreenData.value = NowPlayingScreenData(
+                        nowPlayingTitle = remoteTrack.title,
+                        artistName = remoteTrack.artist,
+                        isVideo = false,
+                        thumbnailURL = remoteTrack.artworkUri,
+                        canvasData = null,
+                        lyricsData = null,
+                        songInfoData = null,
+                        playlistName = "Tocando em ${device.deviceName}",
+                        isRadioQueue = false,
+                    )
+                }
+
+                // 3. Timeline & Smooth Progress Interpolator
+                val basePos = remote.positionMs
+                val totalDur = remote.durationMs
+                val syncTime = if (remote.lastSyncTimestamp > 0) remote.lastSyncTimestamp else System.currentTimeMillis()
+
+                _timeline.update {
+                    it.copy(
+                        current = basePos,
+                        total = totalDur,
+                        loading = false,
+                    )
+                }
+
+                if (remote.isPlaying && totalDur > 0) {
+                    interpolatorJob = launch {
+                        while (isActive) {
+                            delay(100)
+                            val elapsed = System.currentTimeMillis() - syncTime
+                            val current = (basePos + elapsed).coerceAtMost(totalDur)
+                            _timeline.update { it.copy(current = current, total = totalDur, loading = false) }
+                        }
+                    }
+                }
+            }
         }
         // Reset downloading songs & playlists to not downloaded
         checkAllDownloadingSongs()
