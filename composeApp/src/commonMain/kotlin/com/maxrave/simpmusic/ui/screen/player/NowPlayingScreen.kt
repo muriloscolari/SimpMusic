@@ -214,7 +214,7 @@ fun NowPlayingScreenContent(
     // Artwork Pager state — Spotify-style horizontal swipe between queue tracks.
     // The pager wraps the Canvas + Thumbnail layers. Controller layout below stays fixed.
     val nowPlayingState by sharedViewModel.nowPlayingState.collectAsStateWithLifecycle()
-    val queueDataState by sharedViewModel.getQueueDataState().collectAsStateWithLifecycle()
+    val queueDataState by sharedViewModel.displayQueueData.collectAsStateWithLifecycle()
     val artworkQueue by remember {
         derivedStateOf { queueDataState?.data?.listTracks ?: emptyList() }
     }
@@ -231,7 +231,9 @@ fun NowPlayingScreenContent(
             deriveOrderIndex(
                 queue = artworkQueue,
                 nowPlayingVideoId = nowPlayingVideoId,
-                playerOrderIndex = mediaPlayerHandler.currentOrderIndex(),
+                playerOrderIndex =
+                    sharedViewModel.simpConnectRemotePlaybackState.value?.queueIndex
+                        ?: mediaPlayerHandler.currentOrderIndex(),
             )
         }
     }
@@ -348,7 +350,11 @@ fun NowPlayingScreenContent(
                             sharedViewModel.onUIEvent(UIEvent.SkipToPrevious)
                         }
                         is ArtworkSeekAction.Skip -> {
-                            mediaPlayerHandler.playMediaItemInMediaSource(action.index)
+                            if (sharedViewModel.simpConnectActiveRemoteDevice.value != null) {
+                                sharedViewModel.playSimpConnectQueueItem(action.index)
+                            } else {
+                                mediaPlayerHandler.playMediaItemInMediaSource(action.index)
+                            }
                         }
                         ArtworkSeekAction.NoOp -> {
                             Unit
@@ -663,7 +669,11 @@ fun NowPlayingScreenContent(
             NowPlayingContentActions(
                 onUIEvent = { sharedViewModel.onUIEvent(it) },
                 onSeekToQueueIndex = { index ->
-                    mediaPlayerHandler.playMediaItemInMediaSource(index)
+                    if (sharedViewModel.simpConnectActiveRemoteDevice.value != null) {
+                        sharedViewModel.playSimpConnectQueueItem(index)
+                    } else {
+                        mediaPlayerHandler.playMediaItemInMediaSource(index)
+                    }
                 },
                 onArtworkBitmap = { sharedViewModel.setBitmap(it) },
                 onSliderChange = { newValue ->
@@ -713,12 +723,18 @@ fun NowPlayingScreenContent(
                 onDismiss = onDismiss,
                 onToolbarVisibilityChange = { shouldShowToolbar = it },
                 onMoveQueueItem = { from, to ->
-                    coroutineScope.launch {
-                        mediaPlayerHandler.swap(from, to)
+                    // Reordering/removing is local-only: the SimpConnect protocol carries a
+                    // replacement queue but no reorder/remove command.
+                    if (sharedViewModel.simpConnectActiveRemoteDevice.value == null) {
+                        coroutineScope.launch {
+                            mediaPlayerHandler.swap(from, to)
+                        }
                     }
                 },
                 onRemoveQueueItem = { index ->
-                    mediaPlayerHandler.removeMediaItem(index)
+                    if (sharedViewModel.simpConnectActiveRemoteDevice.value == null) {
+                        mediaPlayerHandler.removeMediaItem(index)
+                    }
                 },
                 onQueueItemMore = { index, track -> queueMoreFor = index to track },
             )

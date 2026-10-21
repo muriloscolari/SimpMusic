@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,6 +70,7 @@ fun SimpConnectDevicePickerBottomSheet(
 
     val localDevice by sharedViewModel.simpConnectLocalDevice.collectAsStateWithLifecycle()
     val discoveredDevices by sharedViewModel.simpConnectDiscoveredDevices.collectAsStateWithLifecycle()
+    val pendingDevice by sharedViewModel.simpConnectPendingDevice.collectAsStateWithLifecycle()
     val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
     val status by sharedViewModel.simpConnectStatus.collectAsStateWithLifecycle()
 
@@ -194,12 +196,25 @@ fun SimpConnectDevicePickerBottomSheet(
 
             DeviceRow(
                 name = localDevice.deviceName,
-                subtitle = if (activeRemoteDevice == null) "Tocando neste aparelho" else "Toque para voltar a este aparelho",
+                subtitle = when {
+                    activeRemoteDevice != null -> "Toque para trazer a música de volta para este aparelho"
+                    pendingDevice != null -> "Conectando a ${pendingDevice?.deviceName}…"
+                    else -> "Tocando neste aparelho"
+                },
                 isDesktop = localDevice.platform == "desktop",
-                isActive = activeRemoteDevice == null,
+                isActive = activeRemoteDevice == null && pendingDevice == null,
+                isLoading = pendingDevice != null,
                 onClick = {
-                    if (activeRemoteDevice != null) {
-                        sharedViewModel.disconnectSimpConnect()
+                    when {
+                        activeRemoteDevice != null -> {
+                            // Pull playback instead of just dropping the connection; disconnecting
+                            // left the song playing on the other device with no way to continue.
+                            sharedViewModel.requestSimpConnectHandoff()
+                            onDismiss()
+                        }
+                        // Nothing to connect to yet: let the user abort a stuck handshake instead
+                        // of waiting for the approval timeout.
+                        pendingDevice != null -> sharedViewModel.disconnectSimpConnect()
                     }
                 },
             )
@@ -244,18 +259,26 @@ fun SimpConnectDevicePickerBottomSheet(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(discoveredDevices, key = { it.deviceId }) { device ->
-                        val isConnectedToThis = activeRemoteDevice?.deviceId == device.deviceId
-                        val isConnectingToThis = isConnectedToThis && status == SimpConnectStatusDomain.CONNECTING
-                        val isWaitingApproval = isConnectedToThis && status == SimpConnectStatusDomain.WAITING_FOR_APPROVAL
+                        val isConnectedToThis = activeRemoteDevice?.deviceId == device.deviceId &&
+                            status == SimpConnectStatusDomain.CONNECTED
+                        val isPendingThis = pendingDevice?.deviceId == device.deviceId &&
+                            (status == SimpConnectStatusDomain.CONNECTING || status == SimpConnectStatusDomain.WAITING_FOR_APPROVAL)
+                        val isWaitingApproval = isPendingThis && status == SimpConnectStatusDomain.WAITING_FOR_APPROVAL
+                        val isConnectingToThis = isPendingThis && status == SimpConnectStatusDomain.CONNECTING
 
+                        // Order matters: a device is only "connected" once the handshake finished.
+                        // Checking isConnectedToThis first made a still-connecting device look active.
                         val subText = when {
+                            isWaitingApproval -> "Aguardando confirmação... (toque para cancelar)"
+                            isConnectingToThis -> "Conectando... (toque para cancelar)"
                             isConnectedToThis -> "Conectado como controle remoto"
-                            isWaitingApproval -> "Aguardando confirmação na tela do aparelho..."
-                            isConnectingToThis -> "Conectando..."
+                            activeRemoteDevice != null -> "Toque para mover a reprodução para este aparelho"
                             else -> "Disponível na rede local (${device.hostAddress})"
                         }
 
@@ -266,15 +289,28 @@ fun SimpConnectDevicePickerBottomSheet(
                             isActive = isConnectedToThis,
                             isLoading = isConnectingToThis || isWaitingApproval,
                             onClick = {
-                                if (isConnectedToThis) {
-                                    sharedViewModel.disconnectSimpConnect()
-                                } else {
-                                    sharedViewModel.connectSimpConnectDevice(device)
+                                when {
+                                    isConnectedToThis -> sharedViewModel.disconnectSimpConnect()
+                                    isPendingThis -> sharedViewModel.disconnectSimpConnect()
+                                    else -> sharedViewModel.connectSimpConnectDevice(device)
                                 }
                             },
                         )
                     }
                 }
+            }
+
+            if (status == SimpConnectStatusDomain.FAILED || status == SimpConnectStatusDomain.REJECTED) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (status == SimpConnectStatusDomain.REJECTED) {
+                        "O outro aparelho recusou a conexão."
+                    } else {
+                        "Não foi possível conectar. Verifique se os dois aparelhos estão na mesma rede Wi-Fi."
+                    },
+                    style = typo().bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))

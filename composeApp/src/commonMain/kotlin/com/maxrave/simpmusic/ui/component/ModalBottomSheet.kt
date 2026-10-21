@@ -986,12 +986,23 @@ fun QueueBottomSheet(
     val songEntity by remember(sharedViewModel) {
         sharedViewModel.nowPlayingState.map { it?.songEntity }
     }.collectAsState(null)
-    val queueData by musicServiceHandler.queueData.collectAsStateWithLifecycle()
-    val queue by remember {
+    val queueData by sharedViewModel.displayQueueData.collectAsStateWithLifecycle()
+    val remoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
+    val remoteState by sharedViewModel.simpConnectRemotePlaybackState.collectAsStateWithLifecycle()
+    val isRemote = remoteDevice != null
+    // While this device controls another one, the queue that matters is the target's, not the
+    // local one — which may be empty or hold a completely different session.
+    val queue by remember(queueData?.data?.listTracks) {
         derivedStateOf {
             queueData?.data?.listTracks ?: emptyList()
         }
     }
+    val currentQueueIndex =
+        if (isRemote) {
+            remoteState?.queueIndex ?: -1
+        } else {
+            musicServiceHandler.currentOrderIndex()
+        }
     val loadMoreState by remember {
         derivedStateOf {
             queueData?.queueState ?: QueueData.StateSource.STATE_CREATED
@@ -1017,13 +1028,14 @@ fun QueueBottomSheet(
     LaunchedEffect(shouldLoadMore) {
         snapshotFlow { shouldLoadMore.value }
             .collect {
-                // if should load more, then invoke loadMore
-                if (it && loadMoreState == QueueData.StateSource.STATE_INITIALIZED) musicServiceHandler.loadMore()
+                // if should load more, then invoke loadMore. The remote queue is owned by the
+                // target, so this device cannot extend it.
+                if (it && !isRemote && loadMoreState == QueueData.StateSource.STATE_INITIALIZED) musicServiceHandler.loadMore()
             }
     }
 
     DisposableEffect(Unit) {
-        val currentSongIndex = musicServiceHandler.currentOrderIndex().takeIf { i -> i > -1 } ?: 0
+        val currentSongIndex = currentQueueIndex.takeIf { i -> i > -1 } ?: 0
         Logger.d("QueueBottomSheet", "currentSongIndex: $currentSongIndex")
         coroutineScope.launch {
             lazyListState.requestScrollToItem(currentSongIndex)
@@ -1041,7 +1053,9 @@ fun QueueBottomSheet(
             onDismiss = { moreFor = null },
             navController = navController,
             song = track.toSongEntity(),
-            queuePosition = QueuePosition(index, track.videoId),
+            // Move/delete act on the local player's queue; while remote there is no command for
+            // them, so the row sheet is informational only.
+            queuePosition = if (isRemote) null else QueuePosition(index, track.videoId),
             onNavigateToOtherScreen = onNavigateToOtherScreen,
         )
     }
@@ -1164,6 +1178,7 @@ fun QueueBottomSheet(
                         )
                         Switch(
                             checked = endlessQueueEnable,
+                            enabled = !isRemote,
                             onCheckedChange = {
                                 coroutineScope.launch {
                                     dataStoreManager.setEndlessQueue(it)
@@ -1186,49 +1201,55 @@ fun QueueBottomSheet(
                 LazyColumn(
                     horizontalAlignment = Alignment.Start,
                     state = lazyListState,
+                    // Reordering is a local queue operation; the wire protocol has no reorder
+                    // command, so while remote the list is read-only except for tapping a row.
                     modifier =
-                        Modifier
-                            .pointerInput(Unit) {
-                                detectDragGesturesAfterLongPress(
-                                    onDrag = { change, offset ->
-                                        Logger.d("QueueBottomSheet", "onDrag $offset")
-                                        change.consume()
-                                        dragDropState.onDrag(offset = offset)
+                        if (isRemote) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .pointerInput(Unit) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDrag = { change, offset ->
+                                            Logger.d("QueueBottomSheet", "onDrag $offset")
+                                            change.consume()
+                                            dragDropState.onDrag(offset = offset)
 
-                                        if (overscrollJob?.isActive == true) {
-                                            return@detectDragGesturesAfterLongPress
-                                        }
-
-                                        dragDropState
-                                            .checkForOverScroll()
-                                            .takeIf { it != 0f }
-                                            ?.let {
-                                                overscrollJob =
-                                                    coroutineScope.launch {
-                                                        dragDropState.state.animateScrollBy(
-                                                            it * 1.3f,
-                                                            tween(easing = FastOutLinearInEasing),
-                                                        )
-                                                    }
+                                            if (overscrollJob?.isActive == true) {
+                                                return@detectDragGesturesAfterLongPress
                                             }
-                                            ?: run { overscrollJob?.cancel() }
-                                    },
-                                    onDragStart = { offset ->
-                                        Logger.d("QueueBottomSheet", "onDragStart $offset")
-                                        dragDropState.onDragStart(offset)
-                                    },
-                                    onDragEnd = {
-                                        Logger.d("QueueBottomSheet", "onDragEnd")
-                                        dragDropState.onDragInterrupted(true)
-                                        overscrollJob?.cancel()
-                                    },
-                                    onDragCancel = {
-                                        Logger.d("QueueBottomSheet", "onDragCancel")
-                                        dragDropState.onDragInterrupted()
-                                        overscrollJob?.cancel()
-                                    },
-                                )
-                            },
+
+                                            dragDropState
+                                                .checkForOverScroll()
+                                                .takeIf { it != 0f }
+                                                ?.let {
+                                                    overscrollJob =
+                                                        coroutineScope.launch {
+                                                            dragDropState.state.animateScrollBy(
+                                                                it * 1.3f,
+                                                                tween(easing = FastOutLinearInEasing),
+                                                            )
+                                                        }
+                                                }
+                                                ?: run { overscrollJob?.cancel() }
+                                        },
+                                        onDragStart = { offset ->
+                                            Logger.d("QueueBottomSheet", "onDragStart $offset")
+                                            dragDropState.onDragStart(offset)
+                                        },
+                                        onDragEnd = {
+                                            Logger.d("QueueBottomSheet", "onDragEnd")
+                                            dragDropState.onDragInterrupted(true)
+                                            overscrollJob?.cancel()
+                                        },
+                                        onDragCancel = {
+                                            Logger.d("QueueBottomSheet", "onDragCancel")
+                                            dragDropState.onDragInterrupted()
+                                            overscrollJob?.cancel()
+                                        },
+                                    )
+                                }
+                        },
                 ) {
                     itemsIndexed(
                         queue,
@@ -1240,31 +1261,45 @@ fun QueueBottomSheet(
                         key = { i, t -> queueRowKeys.getOrElse(i) { t.videoId } },
                     ) { index, track ->
                         if (index != -1) {
-                            DraggableItem(
-                                dragDropState = dragDropState,
-                                index = index,
-                                modifier = Modifier,
-                            ) { _ ->
+                            val rowContent: @Composable () -> Unit = {
                                 SongFullWidthItems(
                                     track = track,
                                     isPlaying = track.videoId == songEntity?.videoId,
                                     modifier =
                                         Modifier
                                             .fillMaxWidth(),
-                                    onClickListener = { videoId ->
-                                        if (videoId == track.videoId) {
+                                    onClickListener = {
+                                        if (isRemote) {
+                                            sharedViewModel.playSimpConnectQueueItem(index)
+                                        } else {
                                             musicServiceHandler.playMediaItemInMediaSource(index)
                                         }
                                     },
                                     onMoreClickListener = {
                                         showQueueItemBottomSheet(index)
                                     },
-                                    onAddToQueue = {
-                                        sharedViewModel.addListToQueue(
-                                            arrayListOf(track),
-                                        )
-                                    },
+                                    onAddToQueue =
+                                        if (isRemote) {
+                                            null
+                                        } else {
+                                            {
+                                                sharedViewModel.addListToQueue(
+                                                    arrayListOf(track),
+                                                )
+                                            }
+                                        },
                                 )
+                            }
+                            if (isRemote) {
+                                rowContent()
+                            } else {
+                                DraggableItem(
+                                    dragDropState = dragDropState,
+                                    index = index,
+                                    modifier = Modifier,
+                                ) { _ ->
+                                    rowContent()
+                                }
                             }
                         }
                     }

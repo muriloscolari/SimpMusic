@@ -74,6 +74,7 @@ import com.maxrave.simpmusic.Platform
 import com.maxrave.simpmusic.expect.getDownloadFolderPath
 import com.maxrave.simpmusic.expect.isOnUnmeteredNetwork
 import com.maxrave.simpmusic.expect.ui.toByteArray
+import com.maxrave.simpmusic.extension.toQueueTrack
 import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.utils.decodePromos
@@ -160,15 +161,59 @@ class SharedViewModel(
 
     val simpConnectDiscoveredDevices = simpConnectRepository.discoveredDevices
     val simpConnectLocalDevice = simpConnectRepository.localDevice
+    val simpConnectPendingDevice = simpConnectRepository.pendingDevice
     val simpConnectActiveRemoteDevice = simpConnectRepository.activeRemoteDevice
     val simpConnectRemotePlaybackState = simpConnectRepository.remotePlaybackState
     val simpConnectStatus = simpConnectRepository.connectionStatus
     val simpConnectIncomingAuthRequest = simpConnectRepository.incomingAuthRequest
 
     fun refreshSimpConnectDevices() = simpConnectRepository.refreshDiscovery()
-    fun connectSimpConnectDevice(device: com.maxrave.domain.data.model.simpconnect.DiscoveredDeviceDomain) = simpConnectRepository.connectToDevice(device)
+
+    /**
+     * Tapping a device while this one has a session moves it there (Spotify Connect behaviour),
+     * including when the session is paused. If there is nothing loaded locally we only attach as a
+     * remote controller. When already controlling a device, the session moves from it to the newly
+     * picked one.
+     */
+    fun connectSimpConnectDevice(device: com.maxrave.domain.data.model.simpconnect.DiscoveredDeviceDomain) {
+        val active = simpConnectActiveRemoteDevice.value
+        if (active != null) {
+            // Already controlling a device: move the session instead of dropping the old one,
+            // which kept playing in the background while the UI attached to the new target.
+            if (active.deviceId != device.deviceId) {
+                simpConnectRepository.transferToDevice(device)
+            }
+            return
+        }
+        // A paused session is still a session: move it too, keeping the paused state.
+        val hasLocalSession = mediaPlayerHandler.nowPlaying.value != null &&
+            mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
+        if (hasLocalSession) {
+            simpConnectRepository.handoffToRemote(device)
+        } else {
+            simpConnectRepository.connectToDevice(device)
+        }
+    }
+
     fun disconnectSimpConnect() = simpConnectRepository.disconnect()
     fun requestSimpConnectHandoff() = simpConnectRepository.requestHandoff()
+
+    /**
+     * Plays a row of the remote queue on the controlled device. The whole remote queue travels
+     * with the command so the target keeps the same order and context instead of replacing it
+     * with a single item.
+     */
+    fun playSimpConnectQueueItem(index: Int) {
+        val remote = simpConnectRemotePlaybackState.value ?: return
+        val track = remote.queue.getOrNull(index) ?: return
+        if (track.videoId == remote.track?.videoId) return
+        simpConnectRepository.sendPlayTrack(
+            videoId = track.videoId,
+            queue = remote.queue,
+            startIndex = index,
+            playWhenReady = true,
+        )
+    }
 
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate
@@ -247,7 +292,46 @@ class SharedViewModel(
                 mediaPlayerHandler.nowPlayingState.value.isNotEmpty()
         }
 
+    /** Remote position projected to "now", matching the interpolation used by the timeline. */
+    private fun currentSimpConnectPosition(): Long {
+        val remote = simpConnectRemotePlaybackState.value ?: return 0L
+        val total = remote.durationMs.takeIf { it > 0L } ?: remote.track?.durationMs ?: 0L
+        val elapsed =
+            if (remote.isPlaying) {
+                (System.currentTimeMillis() - remote.lastSyncTimestamp).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+        val position = remote.positionMs.coerceAtLeast(0L) + elapsed
+        return if (total > 0L) position.coerceAtMost(total) else position
+    }
+
     fun getQueueDataState() = mediaPlayerHandler.queueData
+
+    /**
+     * Queue the UI should render: the controlled device's queue while SimpConnect is remote,
+     * otherwise the local one. Mutations stay local-only; [playSimpConnectQueueItem] handles
+     * starting a remote row.
+     */
+    val displayQueueData: StateFlow<QueueData?> =
+        combine(
+            simpConnectActiveRemoteDevice,
+            simpConnectRemotePlaybackState,
+            mediaPlayerHandler.queueData,
+        ) { device, remote, local ->
+            if (device == null) {
+                local
+            } else {
+                QueueData(
+                    queueState = QueueData.StateSource.STATE_INITIALIZED,
+                    data =
+                        QueueData.Data(
+                            listTracks = remote?.queue?.map { it.toQueueTrack() }.orEmpty(),
+                            playlistName = "Tocando em ${device.deviceName}",
+                        ),
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, mediaPlayerHandler.queueData.value)
 
     val castState: StateFlow<GenericCastState> get() = mediaPlayerHandler.castState
 
@@ -636,18 +720,51 @@ class SharedViewModel(
         // SimpConnect Remote Playback Synchronization
         viewModelScope.launch {
             var interpolatorJob: Job? = null
+            // The remote state overwrites the now-playing model/screen data. Snapshot the local
+            // ones on the way in and put them back on the way out: the local collectors are
+            // guarded while remote is active and only re-emit on a track change, so without this
+            // the screen kept the remote title/artwork/"Tocando em X" after coming back.
+            var localNowPlayingState: NowPlayingTrackState? = null
+            var localScreenData: NowPlayingScreenData? = null
+            var mirroringRemote = false
             combine(simpConnectActiveRemoteDevice, simpConnectRemotePlaybackState) { device, remote ->
                 Pair(device, remote)
             }.collectLatest { (device, remote) ->
                 interpolatorJob?.cancel()
                 if (device == null || remote == null) {
                     // Restored to local playback when remote is disconnected
+                    if (mirroringRemote) {
+                        localNowPlayingState?.let { _nowPlayingState.value = it }
+                        localScreenData?.let { _nowPlayingScreenData.value = it }
+                        mirroringRemote = false
+                    }
                     _controllerState.value = mediaPlayerHandler.controlState.value
                     _nowPlayingState.value = mediaPlayerHandler.nowPlayingState.value
-                    val dur = mediaPlayerHandler.getPlayerDuration()
+                    val dur =
+                        mediaPlayerHandler.getPlayerDuration().takeIf { d -> d > 0L }
+                            ?: (mediaPlayerHandler.nowPlayingState.value.songEntity?.durationSeconds?.toLong() ?: 0L) * 1000L
                     val pos = mediaPlayerHandler.getProgress()
-                    _timeline.update { it.copy(current = pos, total = dur, loading = false) }
+                    _timeline.update {
+                        it.copy(
+                            current = pos.coerceAtLeast(0L),
+                            // Nothing local loaded: drop the remote duration instead of leaving
+                            // its progress bar behind.
+                            total = dur.takeIf { d -> d > 0L } ?: if (mediaPlayerHandler.nowPlaying.value == null) -1L else it.total,
+                            loading = false,
+                            // The live flag was forced to false while mirroring; the local
+                            // registry does not re-emit on its own when we come back.
+                            isLive = LiveStreamRegistry.isLive(mediaPlayerHandler.nowPlayingState.value.mediaItem.mediaId),
+                        )
+                    }
                     return@collectLatest
+                }
+
+                if (!mirroringRemote) {
+                    // First real remote state: keep what the local session looked like so it can
+                    // be restored when the user goes back to this device.
+                    localNowPlayingState = _nowPlayingState.value
+                    localScreenData = _nowPlayingScreenData.value
+                    mirroringRemote = true
                 }
 
                 // 1. Controller State
@@ -666,9 +783,11 @@ class SharedViewModel(
                     isCrossfading = false,
                 )
 
-                // 2. Track & Screen Data
+                // 2. Track & Screen Data. Rebuild only when the track actually changed: this
+                // collector runs on every 500 ms state sync, and rebuilding the media item each
+                // time reset lyrics/song info and caused needless recomposition.
                 val remoteTrack = remote.track
-                if (remoteTrack != null) {
+                if (remoteTrack != null && _nowPlayingState.value?.songEntity?.videoId != remoteTrack.videoId) {
                     val track = Track(
                         album = remoteTrack.album?.let { Album(name = it, id = "") },
                         artists = listOf(Artist(name = remoteTrack.artist, id = null)),
@@ -701,28 +820,49 @@ class SharedViewModel(
                         playlistName = "Tocando em ${device.deviceName}",
                         isRadioQueue = false,
                     )
+                } else if (remoteTrack == null && _nowPlayingState.value != null) {
+                    // Target has nothing loaded: do not keep showing this device's old track as if
+                    // it were playing remotely.
+                    _nowPlayingState.value = null
+                    _nowPlayingScreenData.value =
+                        NowPlayingScreenData(
+                            playlistName = "Tocando em ${device.deviceName}",
+                            isRadioQueue = false,
+                            nowPlayingTitle = "",
+                            artistName = "",
+                            isVideo = false,
+                            thumbnailURL = null,
+                        )
                 }
 
                 // 3. Timeline & Smooth Progress Interpolator
-                val basePos = remote.positionMs
-                val totalDur = remote.durationMs
-                val syncTime = if (remote.lastSyncTimestamp > 0) remote.lastSyncTimestamp else System.currentTimeMillis()
+                // lastSyncTimestamp is the LOCAL time at which the state arrived (the client
+                // rewrites it). Using the sender's clock here made the position jump whenever the
+                // two devices' clocks disagreed, which is the normal case.
+                val totalDur = remote.durationMs.takeIf { it > 0L } ?: remoteTrack?.durationMs ?: 0L
+                val basePos = remote.positionMs.coerceAtLeast(0L)
+                val syncTime = remote.lastSyncTimestamp.takeIf { it > 0L } ?: System.currentTimeMillis()
 
                 _timeline.update {
                     it.copy(
-                        current = basePos,
-                        total = totalDur,
+                        current = if (totalDur > 0L) basePos.coerceAtMost(totalDur) else basePos,
+                        // No remote track means no duration: keep an old local total would draw a
+                        // progress bar for a song the target is not playing.
+                        total =
+                            totalDur.takeIf { d -> d > 0L }
+                                ?: if (remoteTrack == null) -1L else it.total,
                         loading = false,
+                        isLive = false,
                     )
                 }
 
-                if (remote.isPlaying && totalDur > 0) {
+                if (remote.isPlaying && totalDur > 0L) {
                     interpolatorJob = launch {
                         while (isActive) {
                             delay(100)
-                            val elapsed = System.currentTimeMillis() - syncTime
+                            val elapsed = (System.currentTimeMillis() - syncTime).coerceAtLeast(0L)
                             val current = (basePos + elapsed).coerceAtMost(totalDur)
-                            _timeline.update { it.copy(current = current, total = totalDur, loading = false) }
+                            _timeline.update { it.copy(current = current, total = totalDur, loading = false, isLive = false) }
                         }
                     }
                 }
@@ -1062,7 +1202,19 @@ class SharedViewModel(
             if (simpConnectActiveRemoteDevice.value != null) {
                 simpConnectRepository.sendPlayTrack(
                     videoId = track.videoId,
-                    startIndex = index ?: 0,
+                    // Carry the metadata so the target does not have to recreate the song from a
+                    // bare videoId (which produced an empty title in the target's database).
+                    queue = listOf(
+                        com.maxrave.domain.data.model.simpconnect.TrackSummaryDomain(
+                            videoId = track.videoId,
+                            title = track.title,
+                            artist = track.artists?.firstOrNull()?.name.orEmpty(),
+                            album = track.album?.name,
+                            artworkUri = track.thumbnails?.lastOrNull()?.url,
+                            durationMs = (track.durationSeconds ?: 0) * 1000L,
+                        ),
+                    ),
+                    startIndex = 0,
                 )
                 return@launch
             }
@@ -1132,8 +1284,23 @@ class SharedViewModel(
                     UIEvent.Next -> simpConnectRepository.sendNext()
                     UIEvent.Previous -> simpConnectRepository.sendPrevious()
                     UIEvent.SkipToPrevious -> simpConnectRepository.sendPrevious()
-                    is UIEvent.UpdateProgress -> {
+                    UIEvent.Stop -> simpConnectRepository.sendPause()
+                    UIEvent.Backward -> {
+                        val target = currentSimpConnectPosition() - 5_000L
+                        if (target >= 0L) simpConnectRepository.sendSeekTo(target)
+                    }
+                    UIEvent.Forward -> {
+                        val target = currentSimpConnectPosition() + 5_000L
                         val duration = simpConnectRemotePlaybackState.value?.durationMs ?: 0L
+                        simpConnectRepository.sendSeekTo(
+                            if (duration > 0L) target.coerceAtMost(duration) else target,
+                        )
+                    }
+                    is UIEvent.UpdateProgress -> {
+                        val remote = simpConnectRemotePlaybackState.value
+                        val duration = remote?.durationMs?.takeIf { it > 0L }
+                            ?: remote?.track?.durationMs
+                            ?: 0L
                         if (duration > 0L) {
                             simpConnectRepository.sendSeekTo((uiEvent.newProgress * duration).toLong())
                         }
