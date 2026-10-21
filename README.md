@@ -38,13 +38,15 @@ Abaixo estão todas as otimizações e novos recursos desenvolvidos e incorporad
 - **Pausa de UI em Segundo Plano**: Quando a tela de reprodução está ativa, transições infinitas ociosas e recomposições das telas em segundo plano são congeladas para liberar ciclos de CPU.
 - **Fluidez em Grandes Playlists**: Otimização profunda de paginação no banco de dados SQLite, transações em lote (*batch transactions*) e cálculo correto de offset de linhas para eliminar travamentos ao rolar bibliotecas com centenas de músicas.
 
-### 🚗 2. Reformulação Completa do Android Auto
-- **Navegação Visual com Capas de Álbuns**: Substituição de listas em texto puro por seções visuais com arte em alta resolução na tela inicial e nas categorias.
-- **Fileira Única de Playlists Recentes**: A tela *Início* agora exibe exatamente 1 linha (4 itens mais recentes), garantindo que as recomendações do YouTube Music (*Ouvir de novo*, *Novidades*, etc.) fiquem logo abaixo sem exigir rolagem interminável.
-- **Aba Biblioteca / Playlists Completa**: Integração das playlists salvas do usuário, playlists locais e biblioteca do YouTube Music no painel do carro.
+### 🚗 2. Reformulação do Android Auto
+- **Navegação Visual com Capas de Álbuns**: Categorias, prateleiras e listas com arte em alta resolução na tela do carro.
+- **Prateleira de Playlists na Categoria Início**: A categoria *Início* agora começa com uma prateleira de playlists; ao abri-la, as capas e a biblioteca completa aparecem em grade.
+- **Categorias de Biblioteca**: Acesso rápido a *Downloaded*, *Favorites*, *Playlists* e *Songs*, na mesma ordem da interface nova.
 - **Desduplicação de Curtidas**: Filtro automático para evitar que a playlist de curtidas do YouTube apareça repetida (*"Músicas que gostei"* e *"YouTube Liked Music"*).
 - **Botão de Fila na Tela do Carro**: Botão dedicado de fila adicionado ao player em reprodução (*Now Playing*) para inspecionar e gerenciar as próximas faixas direto na multimídia do veículo.
 - **Correção de Seleção de Faixas**: Solução definitiva para a falha em que clicar em uma música na tela do carro não tocava a faixa correta ou revertia para a música anterior.
+
+> A interface nova com Car App Library (abas e seções) está preservada no branch `feat/car-cal-ui` (tag `car-cal-ui-v1`). No branch `custom`, o Android Auto usa a interface legada de `MediaBrowserService`, otimizada para ficar o mais próxima possível dela.
 
 ### 📱 3. Novo Widget Compacto Nativo (RemoteViews)
 - **Arquitetura Leve em RemoteViews**: Substituição de frameworks pesados por RemoteViews nativo do Android, garantindo inicialização instantânea e menor consumo de RAM e bateria.
