@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
@@ -242,40 +243,41 @@ class LibraryViewModel(
 
     fun getPlaylistFavorite() {
         viewModelScope.launch {
-            albumRepository.getLikedAlbums().collect { album ->
+            combine(
+                albumRepository.getLikedAlbums(),
+                playlistRepository.getLikedPlaylists(),
+            ) { album, playlist ->
                 val temp: MutableList<PlaylistType> = mutableListOf()
                 temp.addAll(album)
-                playlistRepository.getLikedPlaylists().collect { playlist ->
-                    temp.addAll(playlist)
-                    val sortedList =
-                        temp.sortedWith<PlaylistType>(
-                            Comparator { p0, p1 ->
-                                val timeP0: LocalDateTime? =
-                                    when (p0) {
-                                        is AlbumEntity -> p0.favoriteAt ?: p0.inLibrary
-                                        is PlaylistEntity -> p0.favoriteAt ?: p0.inLibrary
-                                        else -> null
-                                    }
-                                val timeP1: LocalDateTime? =
-                                    when (p1) {
-                                        is AlbumEntity -> p1.favoriteAt ?: p1.inLibrary
-                                        is PlaylistEntity -> p1.favoriteAt ?: p1.inLibrary
-                                        else -> null
-                                    }
-                                if (timeP0 == null || timeP1 == null) {
-                                    return@Comparator if (timeP0 == null && timeP1 == null) {
-                                        0
-                                    } else if (timeP0 == null) {
-                                        -1
-                                    } else {
-                                        1
-                                    }
-                                }
-                                timeP0.compareTo(timeP1) // Sort in descending order by inLibrary time
-                            },
-                        )
-                    _favoritePlaylist.value = LocalResource.Success(sortedList)
-                }
+                temp.addAll(playlist)
+                temp.sortedWith<PlaylistType>(
+                    Comparator { p0, p1 ->
+                        val timeP0: LocalDateTime? =
+                            when (p0) {
+                                is AlbumEntity -> p0.favoriteAt ?: p0.inLibrary
+                                is PlaylistEntity -> p0.favoriteAt ?: p0.inLibrary
+                                else -> null
+                            }
+                        val timeP1: LocalDateTime? =
+                            when (p1) {
+                                is AlbumEntity -> p1.favoriteAt ?: p1.inLibrary
+                                is PlaylistEntity -> p1.favoriteAt ?: p1.inLibrary
+                                else -> null
+                            }
+                        if (timeP0 == null || timeP1 == null) {
+                            return@Comparator if (timeP0 == null && timeP1 == null) {
+                                0
+                            } else if (timeP0 == null) {
+                                -1
+                            } else {
+                                1
+                            }
+                        }
+                        timeP0.compareTo(timeP1) // Sort in descending order by inLibrary time
+                    },
+                )
+            }.collectLatest { sortedList ->
+                _favoritePlaylist.value = LocalResource.Success(sortedList)
             }
         }
     }
