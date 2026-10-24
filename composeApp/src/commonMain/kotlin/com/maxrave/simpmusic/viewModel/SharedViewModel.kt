@@ -154,7 +154,12 @@ class SharedViewModel(
     var isFirstLiked: Boolean = false
     var isFirstMiniplayer: Boolean = false
     var isFirstSuggestions: Boolean = false
-    var showedUpdateDialog: Boolean = false
+    private var _showedUpdateDialog = MutableStateFlow(false)
+    val showedUpdateDialog: StateFlow<Boolean> = _showedUpdateDialog.asStateFlow()
+
+    fun setShowedUpdateDialog(value: Boolean) {
+        _showedUpdateDialog.value = value
+    }
 
     private val appIdentity: AppIdentity by inject()
     val simpConnectRepository: com.maxrave.domain.repository.SimpConnectRepository by inject()
@@ -1511,7 +1516,7 @@ class SharedViewModel(
     val updateResponse: StateFlow<UpdateData?> = _updateResponse
 
     fun dismissUpdateDialog(tagName: String) {
-        showedUpdateDialog = false
+        _showedUpdateDialog.value = false
         putString("dismissed_update_tag", tagName)
     }
 
@@ -1533,7 +1538,7 @@ class SharedViewModel(
                         is Resource.Success if (data != null) -> {
                             _updateResponse.value = data
                             if (isManual || data.tagName != dismissedTag) {
-                                showedUpdateDialog = true
+                                _showedUpdateDialog.value = true
                             }
                         }
 
@@ -1550,7 +1555,7 @@ class SharedViewModel(
                         is Resource.Success if (data != null) -> {
                             _updateResponse.value = data
                             if (isManual || data.tagName != dismissedTag) {
-                                showedUpdateDialog = true
+                                _showedUpdateDialog.value = true
                             }
                         }
 

@@ -123,6 +123,7 @@ dependencies {
 // obfuscated + size-reduced bytecode instead of raw Gradle output.
 // `dependsOn(proguardReleaseJars)` builds the shrunk jars first.
 tasks.named<hydraulic.conveyor.gradle.WriteConveyorConfigTask>("writeConveyorConfig") {
+    dependsOn(":composeApp:generateBuildKonfig")
     dependsOn(tasks.named("proguardReleaseJars"))
     val proguardJarsDir = layout.buildDirectory.dir("compose/tmp/main-release/proguard")
     doLast {

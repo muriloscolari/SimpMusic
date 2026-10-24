@@ -170,6 +170,7 @@ fun App(
     val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
     val nowPlayingData by viewModel.nowPlayingState.collectAsStateWithLifecycle()
     val updateData by viewModel.updateResponse.collectAsStateWithLifecycle()
+    val showedUpdateDialog by viewModel.showedUpdateDialog.collectAsStateWithLifecycle()
     val intent by viewModel.intent.collectAsStateWithLifecycle()
     val showNotificationPermissionDialog by viewModel.showNotificationPermissionDialog.collectAsStateWithLifecycle()
 
@@ -494,12 +495,12 @@ fun App(
         }
     }
 
-    LaunchedEffect(updateData, viewModel.showedUpdateDialog) {
+    LaunchedEffect(updateData, showedUpdateDialog) {
         val response = updateData ?: return@LaunchedEffect
         // Only a NEWER release is offered. This used to compare the tags for inequality, which told a
         // build ahead of the latest release (dev, beta) to "update" back down to it, and told every
         // F-Droid-channel user to update on each launch: that channel's tag carries no leading "v".
-        if (viewModel.showedUpdateDialog && VersionManager.isBehind(response.tagName)) {
+        if (showedUpdateDialog && VersionManager.isBehind(response.tagName)) {
             shouldShowUpdateDialog = true
         }
     }
@@ -980,7 +981,7 @@ fun App(
                                         TextButton(
                                             onClick = {
                                                 shouldShowUpdateDialog = false
-                                                viewModel.showedUpdateDialog = false
+                                                viewModel.setShowedUpdateDialog(false)
                                                 openUrl("https://github.com/muriloscolari/SimpMusic/releases/latest")
                                             },
                                         ) {

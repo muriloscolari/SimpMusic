@@ -186,10 +186,31 @@ actual object PlatformAppUpdater {
 
     private fun downloadFileWithProgress(urlStr: String, destinationFile: File) {
         val tempFile = File(destinationFile.parentFile, destinationFile.name + ".download")
-        val url = URI(urlStr).toURL()
-        val connection = url.openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = true
-        connection.connect()
+        var currentUrl = urlStr
+        var redirects = 0
+        var connection: HttpURLConnection
+
+        while (true) {
+            val url = URI(currentUrl).toURL()
+            connection = url.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = true
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("User-Agent", "SimpMusic-Desktop-Updater")
+            connection.connect()
+
+            val code = connection.responseCode
+            if (code in 300..399) {
+                val location = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (location.isNullOrBlank() || ++redirects > 5) {
+                    throw IllegalStateException("Redirecionamento HTTP inválido ($code)")
+                }
+                currentUrl = URI(currentUrl).resolve(location).toString()
+                continue
+            }
+            break
+        }
 
         if (connection.responseCode !in 200..299) {
             throw IllegalStateException("Erro HTTP ${connection.responseCode}: ${connection.responseMessage}")
@@ -217,10 +238,23 @@ actual object PlatformAppUpdater {
             }
         }
 
-        if (destinationFile.exists()) {
-            destinationFile.delete()
+        tempFile.setExecutable(true, false)
+        try {
+            java.nio.file.Files.move(
+                tempFile.toPath(),
+                destinationFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: Exception) {
+            if (destinationFile.exists()) {
+                destinationFile.delete()
+            }
+            if (!tempFile.renameTo(destinationFile)) {
+                tempFile.copyTo(destinationFile, overwrite = true)
+                tempFile.delete()
+            }
         }
-        tempFile.renameTo(destinationFile)
+        destinationFile.setExecutable(true, false)
     }
 
     private fun runDirectDownload(downloadUrl: String, currentFile: File) {

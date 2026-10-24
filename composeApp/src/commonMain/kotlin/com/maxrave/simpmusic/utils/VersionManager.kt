@@ -1,6 +1,7 @@
 package com.maxrave.simpmusic.utils
 
 import com.maxrave.simpmusic.BuildKonfig
+import com.maxrave.simpmusic.getPlatform
 
 object VersionManager {
     private var versionName: String? = null
@@ -26,7 +27,12 @@ object VersionManager {
         }
 
     /** True when [tag] names a release newer than this build. */
-    fun isBehind(tag: String): Boolean = isNewerRelease(current = getVersionName(), tag = tag)
+    fun isBehind(tag: String): Boolean =
+        isNewerRelease(
+            current = getVersionName(),
+            tag = tag,
+            isWindows = getPlatform().osName().lowercase().contains("windows"),
+        )
 
     private fun removeDevSuffix(versionName: String): String {
         return if (versionName.endsWith("-dev")) {
@@ -46,11 +52,12 @@ object VersionManager {
 internal fun isNewerRelease(
     current: String,
     tag: String,
+    commitHash: String = VersionManager.getGitCommitHash(),
+    isWindows: Boolean = false,
 ): Boolean {
     val cleanTag = tag.trim().removePrefix("custom-").removePrefix("v")
     val cleanCurrent = current.trim().removePrefix("custom-").removePrefix("v")
 
-    val commitHash = VersionManager.getGitCommitHash()
     if (commitHash.isNotEmpty() && tag.contains(commitHash)) {
         return false
     }
@@ -58,6 +65,14 @@ internal fun isNewerRelease(
     val versionComparison = compareVersions(cleanCurrent, cleanTag)
     if (versionComparison < 0) return true
     if (versionComparison > 0) return false
+
+    // When base numeric versions match (e.g. 2.3.0 vs custom-v2.3.0-<sha>):
+    // On Linux AppImage and Android, custom CI builds can replace any commit build with the same
+    // base version. On Windows MSIX, Windows Package Manager refuses in-place upgrades when the
+    // 4-part numeric MSIX version hasn't increased, so skip same-version commit updates on Windows.
+    if (!isWindows && tag.startsWith("custom-v") && commitHash.isNotEmpty() && !tag.endsWith(commitHash)) {
+        return true
+    }
 
     // When base numeric versions match (e.g. 1.0.1 vs 1.0.1-hf, or 0.1.5-beta vs 0.1.5):
     val tagIsHotfix = cleanTag.contains("-hf") || cleanTag.contains("-hotfix")
