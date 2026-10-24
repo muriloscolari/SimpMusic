@@ -750,16 +750,8 @@ private fun AppleMusicMainView(
                             },
                 ) {
                     AppleMusicMainTitleRow(
-                        title = state.screenData.nowPlayingTitle,
-                        artistName = state.screenData.artistName,
-                        isExplicit = state.screenData.isExplicit,
-                        isUserLoggedIn = state.isUserLoggedIn,
-                        likeStatus = state.likeStatus,
-                        isLiked = state.controllerState.isLiked,
-                        onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
-                        onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
-                        onShowMoreSheet = actions.onShowMoreSheet,
-                        onNavigateToArtist = actions.onNavigateToArtist,
+                        state = state,
+                        actions = actions,
                         typography = typography,
                     )
                     Spacer(modifier = Modifier.height(20.dp))
@@ -930,8 +922,10 @@ private fun AppleMusicMainView(
                                         isUserLoggedIn = state.isUserLoggedIn,
                                         likeStatus = state.likeStatus,
                                         isLiked = state.controllerState.isLiked,
+                                        isRadioActive = state.screenData.isRadioQueue,
                                         onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
                                         onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
+                                        onStartRadio = { actions.onUIEvent(UIEvent.StartRadio) },
                                         onShowMoreSheet = actions.onShowMoreSheet,
                                     )
                                 }
@@ -1038,8 +1032,10 @@ internal fun AppleMusicMainTitleRow(
         isUserLoggedIn = state.isUserLoggedIn,
         likeStatus = state.likeStatus,
         isLiked = state.controllerState.isLiked,
+        isRadioActive = state.screenData.isRadioQueue,
         onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
         onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
+        onStartRadio = { actions.onUIEvent(UIEvent.StartRadio) },
         onShowMoreSheet = actions.onShowMoreSheet,
         onNavigateToArtist = actions.onNavigateToArtist,
         typography = typography,
@@ -1054,8 +1050,10 @@ internal fun AppleMusicMainTitleRow(
     isUserLoggedIn: Boolean,
     likeStatus: Boolean,
     isLiked: Boolean,
+    isRadioActive: Boolean = false,
     onAddToYouTubeLiked: () -> Unit,
     onToggleLike: () -> Unit,
+    onStartRadio: () -> Unit = {},
     onShowMoreSheet: () -> Unit,
     onNavigateToArtist: () -> Unit,
     typography: AppleMusicTypography,
@@ -1097,8 +1095,10 @@ internal fun AppleMusicMainTitleRow(
             isUserLoggedIn = isUserLoggedIn,
             likeStatus = likeStatus,
             isLiked = isLiked,
+            isRadioActive = isRadioActive,
             onAddToYouTubeLiked = onAddToYouTubeLiked,
             onToggleLike = onToggleLike,
+            onStartRadio = onStartRadio,
             onShowMoreSheet = onShowMoreSheet,
         )
     }

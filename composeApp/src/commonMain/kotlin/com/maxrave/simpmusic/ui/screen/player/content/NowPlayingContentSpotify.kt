@@ -152,6 +152,7 @@ import com.maxrave.simpmusic.ui.icon.MoreVert
 import com.maxrave.simpmusic.ui.icon.PlaylistAdd
 import com.maxrave.simpmusic.ui.icon.QueueMusic
 import com.maxrave.simpmusic.ui.icon.Replay5
+import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.Share
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.Subtitles
@@ -191,6 +192,7 @@ import simpmusic.composeapp.generated.resources.rich_synced
 import simpmusic.composeapp.generated.resources.share_lyrics
 import simpmusic.composeapp.generated.resources.show
 import simpmusic.composeapp.generated.resources.spotify_lyrics_provider
+import simpmusic.composeapp.generated.resources.start_radio
 import simpmusic.composeapp.generated.resources.unsynced
 import simpmusic.composeapp.generated.resources.view_count
 
@@ -1146,6 +1148,24 @@ fun NowPlayingContentSpotify(
                                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
+                                                // Start Radio Button
+                                                IconButton(
+                                                    modifier =
+                                                        Modifier
+                                                            .size(24.dp)
+                                                            .aspectRatio(1f)
+                                                            .clip(CircleShape),
+                                                    onClick = {
+                                                        actions.onUIEvent(UIEvent.StartRadio)
+                                                    },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = SimpIcons.Sensors,
+                                                        tint = if (state.screenData.isRadioQueue) com.maxrave.simpmusic.ui.theme.seed else Color.White,
+                                                        contentDescription = stringResource(Res.string.start_radio),
+                                                    )
+                                                }
+
                                                 // NEW: Add to Playlist Button (Center-Right)
                                                 IconButton(
                                                     modifier =

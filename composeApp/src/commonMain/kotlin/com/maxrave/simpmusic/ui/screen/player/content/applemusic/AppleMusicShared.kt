@@ -101,6 +101,7 @@ import com.maxrave.simpmusic.ui.icon.PlayArrow
 import com.maxrave.simpmusic.ui.icon.QueueMusic
 import com.maxrave.simpmusic.ui.icon.Repeat
 import com.maxrave.simpmusic.ui.icon.RepeatOne
+import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.Shuffle
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.Star
@@ -115,6 +116,7 @@ import org.jetbrains.compose.resources.stringResource
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.crossfading
 import simpmusic.composeapp.generated.resources.live_badge
+import simpmusic.composeapp.generated.resources.start_radio
 import kotlin.math.roundToLong
 import org.koin.compose.koinInject
 
@@ -348,8 +350,10 @@ internal fun AppleMusicHeaderActions(
         isUserLoggedIn = state.isUserLoggedIn,
         likeStatus = state.likeStatus,
         isLiked = state.controllerState.isLiked,
+        isRadioActive = state.screenData.isRadioQueue,
         onAddToYouTubeLiked = actions.onAddToYouTubeLiked,
         onToggleLike = { actions.onUIEvent(UIEvent.ToggleLike) },
+        onStartRadio = { actions.onUIEvent(UIEvent.StartRadio) },
         onShowMoreSheet = actions.onShowMoreSheet,
         modifier = modifier,
     )
@@ -360,8 +364,10 @@ internal fun AppleMusicHeaderActions(
     isUserLoggedIn: Boolean,
     likeStatus: Boolean,
     isLiked: Boolean,
+    isRadioActive: Boolean = false,
     onAddToYouTubeLiked: () -> Unit,
     onToggleLike: () -> Unit,
+    onStartRadio: () -> Unit = {},
     onShowMoreSheet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -414,6 +420,11 @@ internal fun AppleMusicHeaderActions(
                 )
             }
         }
+        AppleMusicGlyphButton(
+            icon = SimpIcons.Sensors,
+            onClick = onStartRadio,
+            tint = if (isRadioActive) com.maxrave.simpmusic.ui.theme.seed else Color.White,
+        )
         AppleMusicGlyphButton(icon = SimpIcons.MoreVert, onClick = onShowMoreSheet)
     }
 }

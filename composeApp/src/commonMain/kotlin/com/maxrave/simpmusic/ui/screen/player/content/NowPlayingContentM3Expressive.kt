@@ -111,6 +111,7 @@ import com.maxrave.simpmusic.ui.icon.PlaylistAdd
 import com.maxrave.simpmusic.ui.icon.QueueMusic
 import com.maxrave.simpmusic.ui.icon.Repeat
 import com.maxrave.simpmusic.ui.icon.RepeatOne
+import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.Shuffle
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.screen.player.content.applemusic.AudioOutputSheetHost
@@ -128,6 +129,7 @@ import simpmusic.composeapp.generated.resources.audio_output
 import simpmusic.composeapp.generated.resources.crossfading
 import simpmusic.composeapp.generated.resources.now_playing_upper
 import simpmusic.composeapp.generated.resources.radio_mix_upper
+import simpmusic.composeapp.generated.resources.start_radio
 
 /**
  * The Material 3 Expressive ("Tonal pills") Now Playing style.
@@ -1042,6 +1044,18 @@ private fun ExpressiveConnectedGroup(
                     }
                 }
             }
+        }
+        ExpressiveConnectedSlot(
+            shape = middle,
+            active = state.screenData.isRadioQueue,
+            onClick = { actions.onUIEvent(UIEvent.StartRadio) },
+        ) {
+            Icon(
+                imageVector = SimpIcons.Sensors,
+                contentDescription = stringResource(Res.string.start_radio),
+                tint = if (state.screenData.isRadioQueue) colorScheme.onPrimaryContainer else colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
         }
         ExpressiveConnectedSlot(
             shape = middle,
