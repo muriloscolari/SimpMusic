@@ -7,6 +7,9 @@ on:
     paths-ignore:
       - 'README.md'
       - 'CONTRIBUTING.md'
+      - 'AGENTS.md'
+      - 'GEMINI.md'
+      - 'CLAUDE.md'
       - 'docs/**'
       - '.github/**/*.md'
       - '.github/ISSUE_TEMPLATE/**'
@@ -16,9 +19,72 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build All Platforms & Publish Release
-    runs-on: ubuntu-22.04
+  build-android:
+    name: Build Android APKs
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'microsoft'
+          cache: 'gradle'
+
+      - name: Configure local build properties
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > ./local.properties
+          echo "isFullBuild=true" >> ./gradle.properties
+          if [ -n "$LASTFM_API_KEY" ]; then
+            echo "LASTFM_API_KEY=$LASTFM_API_KEY" >> ./local.properties
+          fi
+          if [ -n "$LASTFM_SECRET" ]; then
+            echo "LASTFM_SECRET=$LASTFM_SECRET" >> ./local.properties
+          fi
+
+      - name: Export library definitions
+        run: ./gradlew exportLibraryDefinitions --no-configuration-cache
+
+      - name: Build Android Release APKs
+        run: ./gradlew :androidApp:assembleRelease --no-configuration-cache
+
+      - name: Stage Android APKs
+        id: stage_apks
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version-name' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
+          mkdir -p staging_android
+          for apk in androidApp/build/outputs/apk/release/*.apk; do
+            [ -f "$apk" ] || continue
+            base=$(basename "$apk" .apk)
+            arch=${base#androidApp-}
+            arch=${arch%-release}
+            cp "$apk" "staging_android/SimpMusic-v${VERSION}-${arch}.apk"
+          done
+          ls -lh staging_android/
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: staging_android/*
+          if-no-files-found: error
+
+  build-desktop:
+    name: Build Desktop (Linux AppImage & Windows MSIX)
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
@@ -40,14 +106,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse2 zip
+          sudo apt-get install -y libfuse2t64 zip || sudo apt-get install -y libfuse2 zip
 
       - name: Configure local build properties
         env:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > ./local.properties
           echo "isFullBuild=true" >> ./gradle.properties
           if [ -n "$LASTFM_API_KEY" ]; then
             echo "LASTFM_API_KEY=$LASTFM_API_KEY" >> ./local.properties
@@ -58,9 +123,6 @@ jobs:
 
       - name: Export library definitions
         run: ./gradlew exportLibraryDefinitions --no-configuration-cache
-
-      - name: Build Android Release APKs
-        run: ./gradlew :androidApp:assembleRelease --no-configuration-cache
 
       - name: Cache mpv-natives
         uses: actions/cache@v4
@@ -112,61 +174,84 @@ jobs:
             * )
           rm -rf "$stage"
 
-      - name: Prepare Release Assets
-        id: prepare_assets
+      - name: Stage Desktop Assets
+        id: stage_desktop
         run: |
           set -euo pipefail
           VERSION=$(grep '^version-name' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-
-          mkdir -p release_assets
-
-          # Android APKs
-          for apk in androidApp/build/outputs/apk/release/*.apk; do
-            [ -f "$apk" ] || continue
-            base=$(basename "$apk" .apk)
-            arch=${base#androidApp-}
-            arch=${arch%-release}
-            cp "$apk" "release_assets/SimpMusic-v${VERSION}-${arch}.apk"
-          done
+          mkdir -p staging_desktop
 
           # Linux AppImage
           appimage=$(ls desktopApp/build/appimage/conveyor/SimpMusic-*.AppImage 2>/dev/null | head -1)
           if [ -n "$appimage" ]; then
-            cp "$appimage" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage
+            cp "$appimage" staging_desktop/SimpMusic-v${VERSION}-Linux-x86_64.AppImage
           fi
           zsync=$(ls desktopApp/build/appimage/conveyor/SimpMusic-*.AppImage.zsync 2>/dev/null | head -1)
           if [ -n "$zsync" ]; then
-            cp "$zsync" release_assets/SimpMusic-v${VERSION}-Linux-x86_64.AppImage.zsync
+            cp "$zsync" staging_desktop/SimpMusic-v${VERSION}-Linux-x86_64.AppImage.zsync
           fi
 
           # Windows offline installer zip and MSIX / appinstaller
           if [ -f installers/SimpMusic-Windows-installer.zip ]; then
-            cp installers/SimpMusic-Windows-installer.zip release_assets/SimpMusic-v${VERSION}-Windows-x64-installer.zip
+            cp installers/SimpMusic-Windows-installer.zip staging_desktop/SimpMusic-v${VERSION}-Windows-x64-installer.zip
           fi
           if [ -f output/simpmusic.appinstaller ]; then
-            cp output/simpmusic.appinstaller release_assets/simpmusic.appinstaller
+            cp output/simpmusic.appinstaller staging_desktop/simpmusic.appinstaller
           fi
           msix=$(ls output/simpmusic-*.x64.msix 2>/dev/null | head -1)
           if [ -n "$msix" ]; then
-            cp "$msix" release_assets/
+            cp "$msix" staging_desktop/
           fi
 
-          echo "Assets staged for release:"
-          ls -lh release_assets/
+          ls -lh staging_desktop/
+
+      - name: Upload Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-assets
+          path: staging_desktop/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-android, build-desktop]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apks
+          path: release_assets
+
+      - name: Download Desktop Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-assets
+          path: release_assets
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.prepare_assets.outputs.version }}
-          SHORT_SHA: ${{ steps.prepare_assets.outputs.short_sha }}
         run: |
+          set -euo pipefail
+          VERSION=$(grep '^version-name' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
+          SHORT_SHA=$(git rev-parse --short HEAD)
           TAG="custom-v${VERSION}-${SHORT_SHA}"
           COMMIT_SUBJECT=$(git log -1 --format="%s")
           COMMIT_BODY=$(git log -1 --format="%b")
           TITLE="SimpMusic v${VERSION} (${SHORT_SHA}) - ${COMMIT_SUBJECT}"
+
+          echo "Assets gathered for release $TAG:"
+          ls -lh release_assets/
 
           cat << EOF > release_notes.md
           Automated build for branch **custom** at commit [\`${SHORT_SHA}\`](https://github.com/${{ github.repository }}/commit/${SHORT_SHA}).
