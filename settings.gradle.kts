@@ -63,6 +63,7 @@ include(
     ":listenTogether",
     ":loginSync",
     ":simpConnect",
+    ":sync",
 )
 
 // core modules
@@ -81,6 +82,7 @@ project(":kizzy").projectDir = File(serviceDir, "kizzy")
 project(":listenTogether").projectDir = File(serviceDir, "listenTogether")
 project(":loginSync").projectDir = File(serviceDir, "loginSync")
 project(":simpConnect").projectDir = File(serviceDir, "simpConnect")
+project(":sync").projectDir = File(serviceDir, "sync")
 
 // media modules
 project(":media-jvm").projectDir = File(mediaDir, "media-jvm")

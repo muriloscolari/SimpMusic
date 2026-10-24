@@ -57,11 +57,17 @@ internal fun isNewerRelease(
 
     val versionComparison = compareVersions(cleanCurrent, cleanTag)
     if (versionComparison < 0) return true
-    if (versionComparison == 0) {
-        if (tag.startsWith("custom-v") && commitHash.isNotEmpty() && !tag.endsWith(commitHash)) {
-            return true
-        }
-    }
+    if (versionComparison > 0) return false
+
+    // When base numeric versions match (e.g. 1.0.1 vs 1.0.1-hf, or 0.1.5-beta vs 0.1.5):
+    val tagIsHotfix = cleanTag.contains("-hf") || cleanTag.contains("-hotfix")
+    val currentIsHotfix = cleanCurrent.contains("-hf") || cleanCurrent.contains("-hotfix")
+    if (tagIsHotfix && !currentIsHotfix) return true
+
+    val currentIsPrerelease = cleanCurrent.contains("-beta") || cleanCurrent.contains("-alpha") || cleanCurrent.contains("-dev")
+    val tagIsPrerelease = cleanTag.contains("-beta") || cleanTag.contains("-alpha") || cleanTag.contains("-dev")
+    if (currentIsPrerelease && !tagIsPrerelease && !tagIsHotfix) return true
+
     return false
 }
 

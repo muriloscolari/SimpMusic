@@ -416,3 +416,7 @@
 # JNA references the signature-polymorphic java.lang.invoke.MethodHandle.invoke(...) overloads, which
 # ProGuard can't resolve as concrete methods. JNA itself is kept above; suppress these warnings.
 -dontwarn com.sun.jna.**
+
+# Preserve BuildKonfig and VersionManager for runtime version/hash checks
+-keep class com.maxrave.simpmusic.BuildKonfig { *; }
+-keep class com.maxrave.simpmusic.utils.VersionManager { *; }

@@ -202,6 +202,9 @@ kotlin {
             implementation(libs.zxing.core)
             // DBus for Linux desktop window occlusion management
             implementation("com.github.hypfvieh:dbus-java-core:5.0.0")
+            // Windows native integration (ITaskbarList3 thumbnail controls)
+            implementation(libs.jna)
+            implementation(libs.jna.platform)
         }
     }
 }

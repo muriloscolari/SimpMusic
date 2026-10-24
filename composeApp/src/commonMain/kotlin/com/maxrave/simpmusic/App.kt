@@ -925,7 +925,7 @@ fun App(
                         onDismissRequest = {
                             if (updateState !is UpdateState.Downloading) {
                                 shouldShowUpdateDialog = false
-                                viewModel.showedUpdateDialog = false
+                                viewModel.dismissUpdateDialog(response.tagName)
                                 PlatformAppUpdater.resetState()
                             }
                         },
@@ -1000,7 +1000,7 @@ fun App(
                                     TextButton(
                                         onClick = {
                                             shouldShowUpdateDialog = false
-                                            viewModel.showedUpdateDialog = false
+                                            viewModel.dismissUpdateDialog(response.tagName)
                                             PlatformAppUpdater.resetState()
                                         },
                                     ) {
@@ -1014,7 +1014,7 @@ fun App(
                                     TextButton(
                                         onClick = {
                                             shouldShowUpdateDialog = false
-                                            viewModel.showedUpdateDialog = false
+                                            viewModel.dismissUpdateDialog(response.tagName)
                                             PlatformAppUpdater.resetState()
                                         },
                                     ) {
@@ -1028,7 +1028,7 @@ fun App(
                                     TextButton(
                                         onClick = {
                                             shouldShowUpdateDialog = false
-                                            viewModel.showedUpdateDialog = false
+                                            viewModel.dismissUpdateDialog(response.tagName)
                                         },
                                     ) {
                                         Text(

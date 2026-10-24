@@ -1510,7 +1510,12 @@ class SharedViewModel(
     private var _updateResponse = MutableStateFlow<UpdateData?>(null)
     val updateResponse: StateFlow<UpdateData?> = _updateResponse
 
-    fun checkForUpdate() {
+    fun dismissUpdateDialog(tagName: String) {
+        showedUpdateDialog = false
+        putString("dismissed_update_tag", tagName)
+    }
+
+    fun checkForUpdate(isManual: Boolean = false) {
         // Raised before the coroutine starts, so Home's launch banner, which reads it right after
         // startup, can never miss a check that is already under way but not yet marked.
         _isCheckingUpdate.value = true
@@ -1520,13 +1525,16 @@ class SharedViewModel(
                 "CheckForUpdateAt",
                 System.currentTimeMillis().toString(),
             )
+            val dismissedTag = if (!isManual) dataStoreManager.getString("dismissed_update_tag").first() else ""
             if (updateChannel == DataStoreManager.GITHUB) {
                 updateRepository.checkForGithubReleaseUpdate().collectLatest { response ->
                     val data = response.data
                     when (response) {
                         is Resource.Success if (data != null) -> {
                             _updateResponse.value = data
-                            showedUpdateDialog = true
+                            if (isManual || data.tagName != dismissedTag) {
+                                showedUpdateDialog = true
+                            }
                         }
 
                         else -> {
@@ -1541,7 +1549,9 @@ class SharedViewModel(
                     when (response) {
                         is Resource.Success if (data != null) -> {
                             _updateResponse.value = data
-                            showedUpdateDialog = true
+                            if (isManual || data.tagName != dismissedTag) {
+                                showedUpdateDialog = true
+                            }
                         }
 
                         else -> {

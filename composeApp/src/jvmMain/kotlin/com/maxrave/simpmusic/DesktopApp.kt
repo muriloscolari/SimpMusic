@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -420,6 +421,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 }
             },
         ) {
+            val coroutineScope = rememberCoroutineScope()
             var isAwtIconified by remember { mutableStateOf(false) }
             var isOccluded by remember { mutableStateOf(false) }
             val isWindowMinimized = windowState.isMinimized || !isVisible || isAwtIconified || isOccluded
@@ -438,6 +440,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
 
             DisposableEffect(window) {
                 DesktopGpuManager.attach(window)
+                val cleanupTaskbarThumbnail = WindowsTaskbarThumbnailController.attach(
+                    window = window,
+                    mediaPlayerHandler = mediaPlayerHandler,
+                    coroutineScope = coroutineScope,
+                )
 
                 fun triggerWakeup() {
                     if (isOccluded) isOccluded = false
@@ -558,6 +565,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     window.removeWindowListener(windowListener)
                     window.removeWindowFocusListener(windowListener)
                     window.removeComponentListener(componentListener)
+                    cleanupTaskbarThumbnail()
                     DesktopGpuManager.detach()
                 }
             }
