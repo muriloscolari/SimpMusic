@@ -18,6 +18,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     name: Build Android APKs
@@ -31,7 +35,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: 'recursive'
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -54,11 +58,8 @@ jobs:
             echo "LASTFM_SECRET=$LASTFM_SECRET" >> ./local.properties
           fi
 
-      - name: Export library definitions
-        run: ./gradlew exportLibraryDefinitions --no-configuration-cache
-
-      - name: Build Android Release APKs
-        run: ./gradlew :androidApp:assembleRelease --no-configuration-cache
+      - name: Export library definitions and Build Android Release APKs
+        run: ./gradlew exportLibraryDefinitions :androidApp:assembleRelease --no-configuration-cache
 
       - name: Stage Android APKs
         id: stage_apks
@@ -80,6 +81,7 @@ jobs:
         with:
           name: android-apks
           path: staging_android/*
+          compression-level: 0
           if-no-files-found: error
 
   build-desktop:
@@ -94,7 +96,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: 'recursive'
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -113,6 +115,7 @@ jobs:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
         run: |
+          echo "sdk.dir=$ANDROID_HOME" > ./local.properties
           echo "isFullBuild=true" >> ./gradle.properties
           if [ -n "$LASTFM_API_KEY" ]; then
             echo "LASTFM_API_KEY=$LASTFM_API_KEY" >> ./local.properties
@@ -121,20 +124,14 @@ jobs:
             echo "LASTFM_SECRET=$LASTFM_SECRET" >> ./local.properties
           fi
 
-      - name: Export library definitions
-        run: ./gradlew exportLibraryDefinitions --no-configuration-cache
-
       - name: Cache mpv-natives
         uses: actions/cache@v4
         with:
           path: mpv-natives
           key: mpv-natives-${{ hashFiles('composeApp/build.gradle.kts') }}
 
-      - name: Populate mpv-natives for desktop
-        run: ./gradlew :composeApp:mpvSetupAll --no-configuration-cache
-
-      - name: Generate Conveyor config
-        run: ./gradlew :desktopApp:writeConveyorConfig --no-configuration-cache
+      - name: Prepare Desktop Build & Generate Conveyor Config
+        run: ./gradlew exportLibraryDefinitions :composeApp:mpvSetupAll :desktopApp:writeConveyorConfig --no-configuration-cache
 
       - name: Run Conveyor (Linux App)
         uses: hydraulic-software/conveyor/actions/build@v22.0
@@ -210,6 +207,7 @@ jobs:
         with:
           name: desktop-assets
           path: staging_desktop/*
+          compression-level: 0
           if-no-files-found: error
 
   publish-release:
@@ -224,7 +222,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Download Android Artifacts
         uses: actions/download-artifact@v4
