@@ -924,6 +924,24 @@ fun MiniPlayer(
                                                 .padding(end = 4.dp),
                                     )
                                 }
+                                if (activeRemoteDevice != null) {
+                                    Icon(
+                                        imageVector = when (activeRemoteDevice?.platform) {
+                                            "desktop" -> SimpIcons.Computer
+                                            "android", "ios", "mobile" -> SimpIcons.Smartphone
+                                            else -> SimpIcons.Devices
+                                        },
+                                        contentDescription = null,
+                                        tint = Color(0xFF1DB954),
+                                        modifier = Modifier.size(13.dp).padding(end = 3.dp),
+                                    )
+                                    Text(
+                                        text = "${activeRemoteDevice?.deviceName} • ",
+                                        style = typo().bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = Color(0xFF1DB954),
+                                        maxLines = 1,
+                                    )
+                                }
                                 Text(
                                     text = (songEntity?.artistName?.connectArtists() ?: ""),
                                     style = typo().bodySmall,

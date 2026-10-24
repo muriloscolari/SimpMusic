@@ -31,6 +31,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +55,8 @@ import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.ui.component.SurfaceDarkColors
 import com.maxrave.simpmusic.ui.component.rememberSurfaceDarkColors
 import com.maxrave.simpmusic.ui.icon.Check
+import com.maxrave.simpmusic.ui.icon.Computer
+import com.maxrave.simpmusic.ui.icon.Devices
 import com.maxrave.simpmusic.ui.icon.Headphones
 import com.maxrave.simpmusic.ui.icon.MusicCast
 import com.maxrave.simpmusic.ui.icon.SimpIcons
@@ -63,6 +66,7 @@ import com.maxrave.simpmusic.ui.theme.typo
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
+import com.maxrave.simpmusic.viewModel.SharedViewModel
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.audio_output
 import simpmusic.composeapp.generated.resources.audio_output_bluetooth
@@ -122,8 +126,25 @@ internal fun AppleMusicOutputSheet(
     val localDensity = LocalDensity.current
     // Scanning for receivers only while this is open: discovery keeps the radio busy.
     val cast = rememberCastReceivers(discover = true)
+    val sharedViewModel: SharedViewModel = koinInject()
+    val simpConnectDevices by sharedViewModel.simpConnectDiscoveredDevices.collectAsStateWithLifecycle()
+    val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
+    val pendingDevice by sharedViewModel.simpConnectPendingDevice.collectAsStateWithLifecycle()
+
+    val allSimpConnectDevices = remember(simpConnectDevices, activeRemoteDevice) {
+        val list = simpConnectDevices.toMutableList()
+        val active = activeRemoteDevice
+        if (active != null && list.none { it.deviceId == active.deviceId }) {
+            list.add(0, active)
+        }
+        list
+    }
+
     // Devices coming and going update the list on their own; the system's own route changing does not.
-    LaunchedEffect(Unit) { onRefresh() }
+    LaunchedEffect(Unit) {
+        onRefresh()
+        sharedViewModel.refreshSimpConnectDevices()
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -158,7 +179,7 @@ internal fun AppleMusicOutputSheet(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp),
                 )
                 outputs.forEach { output ->
-                    val playingHere = output.isActive && !castState.isRemote
+                    val playingHere = output.isActive && !castState.isRemote && activeRemoteDevice == null
                     OutputRow(
                         icon = output.icon(),
                         name = output.displayName(),
@@ -166,13 +187,52 @@ internal fun AppleMusicOutputSheet(
                         selected = playingHere,
                         colors = colors,
                         onClick = {
-                            // Coming back from a receiver: end the Cast session first, or the pick
+                            // Coming back from a receiver or remote: end them first, or the pick
                             // would route a local player that is not the one playing.
                             if (castState.isRemote) cast.disconnect()
+                            if (activeRemoteDevice != null) sharedViewModel.disconnectSimpConnect()
                             onSelectOutput(output)
                             closeSheet()
                         },
                     )
+                }
+                if (allSimpConnectDevices.isNotEmpty()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                        thickness = 1.dp,
+                        color = Color.White.copy(alpha = 0.10f),
+                    )
+                    Text(
+                        text = "SimpConnect (P2P)",
+                        style = typo().bodySmall,
+                        color = colors.subtitle,
+                        modifier = Modifier.fillMaxWidth().padding(start = 32.dp, end = 20.dp, top = 4.dp),
+                    )
+                    allSimpConnectDevices.forEach { dev ->
+                        val isConnected = activeRemoteDevice?.deviceId == dev.deviceId
+                        val isPending = pendingDevice?.deviceId == dev.deviceId
+                        val icon = if (dev.platform.equals("desktop", ignoreCase = true)) SimpIcons.Computer else SimpIcons.Smartphone
+                        val statusText = when {
+                            isConnected -> stringResource(Res.string.audio_output_playing_here)
+                            isPending -> "Conectando..."
+                            else -> "SimpConnect"
+                        }
+                        OutputRow(
+                            icon = icon,
+                            name = dev.deviceName,
+                            status = statusText,
+                            selected = isConnected,
+                            colors = colors,
+                            onClick = {
+                                if (isConnected) {
+                                    sharedViewModel.disconnectSimpConnect()
+                                } else {
+                                    sharedViewModel.connectSimpConnectDevice(dev)
+                                    closeSheet()
+                                }
+                            },
+                        )
+                    }
                 }
                 if (cast.receivers.isNotEmpty()) {
                     HorizontalDivider(

@@ -184,7 +184,7 @@ class SharedViewModel(
             }
             return
         }
-        simpConnectRepository.connectToDevice(device)
+        simpConnectRepository.handoffToRemote(device)
     }
 
     fun disconnectSimpConnect() = simpConnectRepository.disconnect()

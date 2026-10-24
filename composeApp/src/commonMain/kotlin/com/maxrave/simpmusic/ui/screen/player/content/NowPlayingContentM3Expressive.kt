@@ -75,6 +75,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -114,6 +115,11 @@ import com.maxrave.simpmusic.ui.icon.RepeatOne
 import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.Shuffle
 import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.icon.Devices
+import com.maxrave.simpmusic.ui.component.SimpConnectDevicePickerBottomSheet
+import com.maxrave.simpmusic.viewModel.SharedViewModel
+import org.koin.compose.koinInject
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maxrave.simpmusic.ui.screen.player.content.applemusic.AudioOutputSheetHost
 import com.maxrave.simpmusic.ui.screen.player.content.expressive.ExpressiveTransportRow
 import com.maxrave.simpmusic.ui.screen.player.content.expressive.WavySeekBar
@@ -223,6 +229,16 @@ private fun NowPlayingM3ExpressiveLayout(
 
     val isRepeatOne = state.controllerState.repeatState is RepeatState.One
     var showOutputSheet by rememberSaveable { mutableStateOf(false) }
+    var showSimpConnectSheet by rememberSaveable { mutableStateOf(false) }
+    val sharedViewModel: SharedViewModel = koinInject()
+    val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
+
+    if (showSimpConnectSheet) {
+        SimpConnectDevicePickerBottomSheet(
+            onDismiss = { showSimpConnectSheet = false },
+            sharedViewModel = sharedViewModel,
+        )
+    }
 
     // Canvas mode fades the info block in and out. The shell's shared 500ms linear alpha exposes
     // a long half-blended phase in which container-backed buttons pick up the bright canvas
@@ -538,10 +554,34 @@ private fun NowPlayingM3ExpressiveLayout(
                                 } else {
                                     Spacer(Modifier.height(16.dp))
                                 }
+                                AnimatedVisibility(
+                                    visible = activeRemoteDevice != null,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { showSimpConnectSheet = true },
+                                    ) {
+                                        Icon(
+                                            imageVector = SimpIcons.Devices,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                                        )
+                                        Text(
+                                            text = "Controlando: ${activeRemoteDevice?.deviceName}",
+                                            style = typo().bodySmall,
+                                            color = Color(0xFF1DB954),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
                                 Spacer(Modifier.height(12.dp))
                                 ExpressiveConnectedGroup(
                                     state = state,
                                     actions = actions,
+                                    isSimpConnectActive = activeRemoteDevice != null,
                                     onOpenOutput = { showOutputSheet = true },
                                 )
                             }
@@ -955,6 +995,7 @@ internal fun ColumnScope.ExpressivePlaybackControls(
 private fun ExpressiveConnectedGroup(
     state: NowPlayingContentState,
     actions: NowPlayingContentActions,
+    isSimpConnectActive: Boolean,
     onOpenOutput: () -> Unit,
 ) = LeftToRight {
     val colorScheme = MaterialTheme.colorScheme
@@ -981,17 +1022,19 @@ private fun ExpressiveConnectedGroup(
                 modifier = Modifier.size(22.dp),
             )
         }
-        // Output — the phone's own outputs and the Cast receivers in one sheet, the same one the
-        // Apple Music style opens. Every build has outputs to pick, so the slot is never hidden.
-        // An active Cast session tints primary, like Classic's cyan.
+        // Output — the phone's own outputs, Cast receivers and SimpConnect devices.
         ExpressiveConnectedSlot(
             shape = middle,
             onClick = onOpenOutput,
         ) {
             Icon(
-                imageVector = SimpIcons.Headphones,
+                imageVector = if (isSimpConnectActive) SimpIcons.Devices else SimpIcons.Headphones,
                 contentDescription = stringResource(Res.string.audio_output),
-                tint = if (state.castState.isRemote) colorScheme.primary else colorScheme.onSurfaceVariant,
+                tint = when {
+                    isSimpConnectActive -> Color(0xFF1DB954)
+                    state.castState.isRemote -> colorScheme.primary
+                    else -> colorScheme.onSurfaceVariant
+                },
                 modifier = Modifier.size(22.dp),
             )
         }

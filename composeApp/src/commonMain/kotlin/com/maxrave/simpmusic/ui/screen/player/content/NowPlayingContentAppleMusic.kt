@@ -286,8 +286,13 @@ fun NowPlayingContentAppleMusic(
     // ticked row can never disagree.
     val player = koinInject<MediaPlayerHandler>().player
     val audioOutputs by player.audioOutputs.collectAsStateWithLifecycle()
+    val activeRemoteDevice by sharedViewModel.simpConnectActiveRemoteDevice.collectAsStateWithLifecycle()
     val activeOutputName = audioOutputs.firstOrNull { it.isActive }?.displayName()
-    val outputName = if (state.castState.isRemote) state.castState.deviceName else activeOutputName
+    val outputName = when {
+        activeRemoteDevice != null -> activeRemoteDevice?.deviceName
+        state.castState.isRemote -> state.castState.deviceName
+        else -> activeOutputName
+    }
     var showOutputSheet by rememberSaveable { mutableStateOf(false) }
     val openOutput = { showOutputSheet = true }
 
