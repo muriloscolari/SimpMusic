@@ -657,6 +657,9 @@ fun SettingScreen(
     var showLoginSyncDialog by rememberSaveable {
         mutableStateOf(false)
     }
+    var showSimpSyncDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
     var showThirdPartyLibraries by rememberSaveable {
         mutableStateOf(false)
     }
@@ -733,6 +736,11 @@ fun SettingScreen(
                     title = stringResource(Res.string.login_sync_section),
                     modifier = Modifier.onSizeChanged { devicesGroupHeightPx = it.height },
                 ) {
+                    SettingItem(
+                        title = "SimpSync Cloud (E2EE)",
+                        subtitle = "Sincronizar biblioteca, playlists, configurações, contas e estatísticas na nuvem",
+                        onClick = { showSimpSyncDialog = true },
+                    )
                     SettingItem(
                         title =
                             stringResource(
@@ -3063,6 +3071,9 @@ fun SettingScreen(
     }
     if (showLoginSyncDialog) {
         LoginSyncDialog(onDismiss = { showLoginSyncDialog = false })
+    }
+    if (showSimpSyncDialog) {
+        com.maxrave.simpmusic.ui.component.SimpSyncDialog(onDismiss = { showSimpSyncDialog = false })
     }
     if (showYouTubeAccountDialog) {
         BasicAlertDialog(
