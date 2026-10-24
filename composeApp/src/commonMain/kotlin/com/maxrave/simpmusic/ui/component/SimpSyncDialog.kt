@@ -218,11 +218,12 @@ fun SimpSyncDialog(
                                 Spacer(Modifier.width(8.dp))
                             }
                             Text(
-                                when (selectedTab) {
+                                text = when (selectedTab) {
                                     0 -> "Entrar e Sincronizar"
                                     1 -> "Criar Conta"
                                     else -> "Recuperar Conta"
                                 },
+                                color = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                     }
@@ -384,9 +385,9 @@ fun SimpSyncDialog(
                                     color = MaterialTheme.colorScheme.onPrimary,
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("Sincronizando...")
+                                Text("Sincronizando...", color = MaterialTheme.colorScheme.onPrimary)
                             } else {
-                                Text("Sincronizar Agora")
+                                Text("Sincronizar Agora", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
 

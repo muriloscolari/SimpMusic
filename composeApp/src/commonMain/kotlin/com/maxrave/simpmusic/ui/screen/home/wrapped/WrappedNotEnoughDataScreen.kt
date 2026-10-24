@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -131,6 +132,7 @@ fun WrappedNotEnoughDataScreen(
             Text(
                 text = stringResource(Res.string.wrapped_open_analytics),
                 style = MaterialTheme.typography.titleSmall,
+                color = LocalContentColor.current,
             )
         }
     }

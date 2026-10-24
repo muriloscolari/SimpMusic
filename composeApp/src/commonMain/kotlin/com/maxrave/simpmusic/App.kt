@@ -940,6 +940,7 @@ fun App(
                                         Text(
                                             stringResource(Res.string.restart_now),
                                             style = typo().bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimary,
                                         )
                                     }
                                 }
@@ -957,6 +958,7 @@ fun App(
                                         Text(
                                             stringResource(Res.string.try_again),
                                             style = typo().bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimary,
                                         )
                                     }
                                 }
@@ -975,6 +977,7 @@ fun App(
                                             Text(
                                                 stringResource(Res.string.update_now),
                                                 style = typo().bodySmall,
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                             )
                                         }
                                     } else {

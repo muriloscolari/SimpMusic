@@ -2570,14 +2570,16 @@ fun SleepTimerBottomSheet(
                     colors =
                         ButtonDefaults.buttonColors(
                             containerColor = seed,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                             disabledContainerColor = seed.copy(alpha = 0.3f),
+                            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f),
                         ),
                     enabled = isSetEnabled,
                 ) {
                     Text(
                         text = stringResource(Res.string.set),
                         style = typo().labelSmall,
-                        color = rememberSurfaceDarkColors().content,
+                        color = if (isSetEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f),
                         modifier = Modifier.padding(vertical = 4.dp),
                     )
                 }

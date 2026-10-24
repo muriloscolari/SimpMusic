@@ -962,7 +962,10 @@ fun SearchScreen(
                                                         searchViewModel.searchAll(searchText)
                                                     }
                                                 }) {
-                                                    Text(text = stringResource(Res.string.retry))
+                                                    Text(
+                                                        text = stringResource(Res.string.retry),
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                    )
                                                 }
                                             }
                                         }

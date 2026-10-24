@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
@@ -69,7 +70,7 @@ actual fun PlatformWebView(
                 Text(
                     stringResource(Res.string.open_blog_post),
                     style = typo().labelMedium,
-                    color = Color.DarkGray,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -105,7 +106,7 @@ actual fun DiscordWebView(
                 Text(
                     stringResource(Res.string.open_blog_post),
                     style = typo().labelMedium,
-                    color = Color.DarkGray,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     textAlign = TextAlign.Center
                 )
             }

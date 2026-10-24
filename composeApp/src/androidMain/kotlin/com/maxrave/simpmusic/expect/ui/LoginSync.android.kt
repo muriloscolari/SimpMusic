@@ -39,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -327,12 +328,13 @@ actual fun LoginSyncDialog(onDismiss: () -> Unit) {
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (isPush) seed else colors.disabled.copy(alpha = 0.2f),
-                                    contentColor = if (isPush) Color.White else colors.content,
+                                    contentColor = if (isPush) MaterialTheme.colorScheme.onPrimary else colors.content,
                                 ),
                             ) {
                                 Text(
                                     text = "Celular ➔ PC",
                                     style = typo().labelSmall,
+                                    color = if (isPush) MaterialTheme.colorScheme.onPrimary else colors.content,
                                     maxLines = 1,
                                 )
                             }
@@ -342,12 +344,13 @@ actual fun LoginSyncDialog(onDismiss: () -> Unit) {
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (!isPush) seed else colors.disabled.copy(alpha = 0.2f),
-                                    contentColor = if (!isPush) Color.White else colors.content,
+                                    contentColor = if (!isPush) MaterialTheme.colorScheme.onPrimary else colors.content,
                                 ),
                             ) {
                                 Text(
                                     text = "PC ➔ Celular",
                                     style = typo().labelSmall,
+                                    color = if (!isPush) MaterialTheme.colorScheme.onPrimary else colors.content,
                                     maxLines = 1,
                                 )
                             }
@@ -454,12 +457,15 @@ private fun SheetButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = seed),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = seed,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
     ) {
         Text(
             text = text,
             style = typo().labelSmall,
-            color = rememberSurfaceDarkColors().content,
+            color = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(vertical = 4.dp),
         )
     }

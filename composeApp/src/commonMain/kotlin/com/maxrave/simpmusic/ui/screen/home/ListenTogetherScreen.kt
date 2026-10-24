@@ -948,7 +948,7 @@ private fun TextAction(
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(text, style = typo().bodyMedium)
+        Text(text, style = typo().bodyMedium, color = color)
     }
 }
 

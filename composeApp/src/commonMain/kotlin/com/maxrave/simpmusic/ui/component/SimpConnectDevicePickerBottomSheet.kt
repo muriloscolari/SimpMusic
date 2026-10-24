@@ -178,6 +178,7 @@ fun SimpConnectDevicePickerBottomSheet(
                             Text(
                                 text = "Continuar tocando neste aparelho",
                                 style = typo().labelMedium,
+                                color = Color.White,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
