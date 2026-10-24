@@ -11,6 +11,8 @@ class VersionManagerTest {
         assertTrue(isNewerRelease(current = "2.2.0", tag = "custom-v2.3.0-80807ec", commitHash = "f9e34abe", isWindows = true))
         assertTrue(isNewerRelease(current = "2.3.0", tag = "v2.3.1", commitHash = "", isWindows = false))
         assertTrue(isNewerRelease(current = "2.3.0", tag = "v2.3.1", commitHash = "", isWindows = true))
+        assertTrue(isNewerRelease(current = "2.3.1", tag = "v2.3.2", commitHash = "", isWindows = false))
+        assertTrue(isNewerRelease(current = "2.3.1", tag = "v2.3.2", commitHash = "", isWindows = true))
     }
 
     @Test
