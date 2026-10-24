@@ -9,6 +9,8 @@ class VersionManagerTest {
     fun newerNumericVersionIsOffered() {
         assertTrue(isNewerRelease(current = "2.2.0", tag = "custom-v2.3.0-80807ec", commitHash = "f9e34abe", isWindows = false))
         assertTrue(isNewerRelease(current = "2.2.0", tag = "custom-v2.3.0-80807ec", commitHash = "f9e34abe", isWindows = true))
+        assertTrue(isNewerRelease(current = "2.3.0", tag = "v2.3.1", commitHash = "", isWindows = false))
+        assertTrue(isNewerRelease(current = "2.3.0", tag = "v2.3.1", commitHash = "", isWindows = true))
     }
 
     @Test
