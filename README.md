@@ -38,7 +38,15 @@ Abaixo estão todas as otimizações e novos recursos desenvolvidos e incorporad
 - **Pausa de UI em Segundo Plano**: Quando a tela de reprodução está ativa, transições infinitas ociosas e recomposições das telas em segundo plano são congeladas para liberar ciclos de CPU.
 - **Fluidez em Grandes Playlists**: Otimização profunda de paginação no banco de dados SQLite, transações em lote (*batch transactions*) e cálculo correto de offset de linhas para eliminar travamentos ao rolar bibliotecas com centenas de músicas.
 
-### 🚗 2. Reformulação do Android Auto
+### ☁️ 2. SimpSync Cloud: Sincronização em Tempo Real com Criptografia E2EE (Zero-Knowledge)
+- **Criptografia Ponta a Ponta (Zero-Knowledge E2EE)**: Toda a biblioteca (músicas curtidas, playlists locais com fotos e ordem das faixas, artistas seguidos, álbuns favoritados, histórico de reprodução e configurações) é criptografada no cliente com **AES-256-GCM** antes de ser enviada ao servidor.
+- **Chaveiro com Senha Mestra + Recovery Key**: Chave de dados (`DEK`) protegida por derivação **PBKDF2-HMAC-SHA256** (120.000 iterações) e com suporte a Chave de Recuperação (`XXXX-XXXX-XXXX-...`) para recuperação de conta caso a senha seja esquecida.
+- **Auto-Push em Tempo Real (~1.5s)**: Ações principais da biblioteca (curtir uma música, alterar uma playlist, seguir um artista) disparam sincronização automática e silenciosa em ~1.5 segundo, sem precisar esperar nem sincronizar manualmente.
+- **Notificações Instantâneas via WebSocket (~300ms)**: Ao curtir ou alterar uma playlist em um dispositivo (ex: PC), os outros aparelhos conectados (ex: celular Android) recebem o aviso via WebSocket em ~300ms e atualizam a interface automaticamente e em silêncio.
+- **Gerenciamento de Dispositivos Conectados**: Interface completa em *Configurações -> Dispositivos* permitindo visualizar os aparelhos ativos na conta e revogar o acesso de sessões remotas.
+- **Backend Próprio em Go Otimizado e Blindado**: Servidor auto-hospedável com consumo ínfimo de RAM (~10 MB), semáforos de concorrência Argon2id anti-OOM, rate limiter por IP, sincronização delta por hash e bloqueio de novos registros (`ALLOW_REGISTRATION=false`).
+
+### 🚗 3. Reformulação do Android Auto
 - **Navegação Visual com Capas de Álbuns**: Categorias, prateleiras e listas com arte em alta resolução na tela do carro.
 - **Prateleira de Playlists na Categoria Início**: A categoria *Início* agora começa com uma prateleira de playlists; ao abri-la, as capas e a biblioteca completa aparecem em grade.
 - **Categorias de Biblioteca**: Acesso rápido a *Downloaded*, *Favorites*, *Playlists* e *Songs*, na mesma ordem da interface nova.
