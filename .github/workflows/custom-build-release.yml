@@ -249,18 +249,18 @@ jobs:
           set -euo pipefail
           VERSION=$(grep '^version-name' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
           SHORT_SHA=$(git rev-parse --short HEAD)
-          TAG="custom-v${VERSION}-${SHORT_SHA}"
+          TAG="v${VERSION}"
+          TITLE="v${VERSION}"
           COMMIT_SUBJECT=$(git log -1 --format="%s")
           COMMIT_BODY=$(git log -1 --format="%b")
-          TITLE="SimpMusic v${VERSION} (${SHORT_SHA}) - ${COMMIT_SUBJECT}"
 
           echo "Assets gathered for release $TAG:"
           ls -lh release_assets/
 
           cat << EOF > release_notes.md
-          Automated build for branch **custom** at commit [\`${SHORT_SHA}\`](https://github.com/${{ github.repository }}/commit/${SHORT_SHA}).
+          Release **v${VERSION}** (commit [\`${SHORT_SHA}\`](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})).
 
-          ### 📝 Mensagem do Commit:
+          ### 📝 Alterações:
           **${COMMIT_SUBJECT}**
 
           EOF
@@ -286,4 +286,5 @@ jobs:
           gh release create "$TAG" release_assets/* \
             --title "$TITLE" \
             --notes-file release_notes.md \
+            --latest=true \
             --prerelease=false
