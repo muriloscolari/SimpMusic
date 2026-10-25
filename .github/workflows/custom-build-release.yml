@@ -289,7 +289,6 @@ jobs:
           fi
 
           gh release create "$TAG" release_assets/* \
-            --target "$SHORT_SHA" \
             --title "$TITLE" \
             --notes-file release_notes.md \
             --latest=true \
