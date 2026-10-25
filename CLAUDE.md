@@ -20,6 +20,17 @@
 - **Architecture**: Clean Architecture + MVVM
 - **Build system**: Gradle (Kotlin DSL)
 
+## 🏷️ Release Versioning & Git Workflow Rule (MANDATORY)
+
+- **Base Integration Branch**: **`custom`** (never commit directly to `main` or `dev`).
+- **Feature/Fix Branches**: Always branch off `custom` (e.g. `feat/<name>`, `fix/<name>`, `chore/<name>`).
+- **ALWAYS Bump App Version Before Merging to `custom`**:
+  - Every push to `custom` triggers `.github/workflows/custom-build-release.yml`, which automatically builds and publishes a GitHub Release tagged as `v${VERSION}`.
+  - To prevent release collisions and ensure the in-app auto-updater (`VersionManager.kt`) notifies users of new builds, the AI agent **MUST** increment the version in `gradle/libs.versions.toml` before merging any branch into `custom`:
+    - `version-name` (e.g. `2.3.2` -> `2.3.3`)
+    - `version-code` (e.g. `62` -> `63`)
+  - **Never merge into `custom` with an already-released version number.**
+
 ## 🏗️ Architecture
 
 ### Clean Architecture Layers

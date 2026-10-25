@@ -17,8 +17,15 @@ This document provides essential architectural context, operational rules, workf
    - Create atomic branches named `feat/<feature-name>`, `fix/<bug-name>`, or `perf/<improvement-name>` directly from `custom`.
    - Test and verify changes locally.
    - Commit atomic changes with clear Conventional Commit messages (`feat:`, `fix:`, `refactor:`, `chore:`).
+   - **Bump app version** (`version-name` and `version-code` in `gradle/libs.versions.toml`) before merging into `custom`.
    - Merge back into `custom` and push both the feature branch and `custom` to `origin`.
-3. **Submodule Synchronization**:
+3. **Always Bump Version Before Merging into `custom` (MANDATORY)**:
+   - Every push to `custom` triggers the automated CI/CD release workflow (`.github/workflows/custom-build-release.yml`), creating a public release tagged as `v${VERSION}`.
+   - To avoid release tag collisions and ensure the in-app auto-updater (`VersionManager.kt`) notifies users of new builds, **always increment** the version numbers in `gradle/libs.versions.toml`:
+     - `version-name` (e.g. `2.3.2` -> `2.3.3`)
+     - `version-code` (e.g. `62` -> `63`)
+   - Never merge into `custom` with an already-released version number.
+4. **Submodule Synchronization**:
    - If a change requires edits inside `core/`, work on an atomic branch inside `core` derived from its `custom` branch.
    - Commit and push to `muriloscolari/core:custom` FIRST.
    - Only then stage and commit the updated `core` submodule commit pointer in the root `SimpMusic` repository.
