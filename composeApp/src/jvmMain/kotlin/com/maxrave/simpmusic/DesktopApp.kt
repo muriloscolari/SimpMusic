@@ -618,7 +618,19 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         window.toFront()
                         window.requestFocus()
                     } else {
-                        window.toFront()
+                        javax.swing.SwingUtilities.invokeLater {
+                            isAwtIconified = false
+                            isOccluded = false
+                            if (!window.isVisible) {
+                                window.isVisible = true
+                            }
+                            if ((window.extendedState and Frame.ICONIFIED) != 0) {
+                                window.extendedState = window.extendedState and Frame.ICONIFIED.inv()
+                            }
+                            window.toFront()
+                            window.requestFocus()
+                            DesktopGpuManager.onRestored(window)
+                        }
                     }
                 }
             }
