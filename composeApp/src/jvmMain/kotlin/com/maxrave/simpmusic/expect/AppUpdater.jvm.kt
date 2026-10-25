@@ -278,7 +278,7 @@ actual object PlatformAppUpdater {
             val msix = downloadedMsixPath
             try {
                 if (msix != null && File(msix).exists()) {
-                    val psScript = "Start-Sleep -Milliseconds 800; Add-AppxPackage -Path '$msix' -ForceApplicationShutdown -ForceUpdateFromAnyVersion; start 'shell:appsFolder\\Simpmusic_ejp2bhxmz1qq6!Simpmusic'"
+                    val psScript = "Start-Sleep -Milliseconds 800; try { Add-AppxPackage -Path '$msix' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -ErrorAction Stop } catch { Get-AppxPackage -Name '*Simpmusic*' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue; Add-AppxPackage -Path '$msix' -ForceApplicationShutdown -ErrorAction SilentlyContinue }; start 'shell:appsFolder\\Simpmusic_ejp2bhxmz1qq6!Simpmusic'"
                     ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript).start()
                 } else {
                     val psScript = "Start-Sleep -Milliseconds 800; start 'shell:appsFolder\\Simpmusic_ejp2bhxmz1qq6!Simpmusic'"

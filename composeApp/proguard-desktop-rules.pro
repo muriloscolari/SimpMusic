@@ -420,3 +420,6 @@
 # Preserve BuildKonfig and VersionManager for runtime version/hash checks
 -keep class com.maxrave.simpmusic.BuildKonfig { *; }
 -keep class com.maxrave.simpmusic.utils.VersionManager { *; }
+
+# Preserve Windows Taskbar Thumbnail Controller and JNA Win32 callbacks
+-keep class com.maxrave.simpmusic.WindowsTaskbarThumbnailController** { *; }

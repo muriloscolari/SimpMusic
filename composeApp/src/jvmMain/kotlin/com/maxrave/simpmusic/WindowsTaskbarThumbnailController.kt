@@ -10,6 +10,7 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import com.sun.jna.WString
+import com.sun.jna.platform.win32.BaseTSD
 import com.sun.jna.platform.win32.Guid
 import com.sun.jna.platform.win32.Ole32
 import com.sun.jna.platform.win32.User32
@@ -25,6 +26,7 @@ import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.Window
 import java.awt.image.BufferedImage
+import javax.swing.SwingUtilities
 
 /**
  * Native Windows Taskbar Thumbnail Toolbar Controller (ITaskbarList3).
@@ -54,6 +56,15 @@ object WindowsTaskbarThumbnailController {
     private const val ID_PREV = 101
     private const val ID_PLAY_PAUSE = 102
     private const val ID_NEXT = 103
+
+    private val SUBCLASS_ID = BaseTSD.ULONG_PTR(9001L)
+
+    // Strong reference to prevent Garbage Collection of JNA native callbacks
+    @Volatile
+    private var activeSubclassProc: SubclassProcCallback? = null
+
+    @Volatile
+    private var activeWndProc: WindowProcCallback? = null
 
     @Structure.FieldOrder("dwMask", "iId", "iBitmap", "hIcon", "szTip", "dwFlags")
     open class THUMBBUTTON : Structure {
@@ -98,6 +109,34 @@ object WindowsTaskbarThumbnailController {
         }
     }
 
+    private interface CustomComctl32 : Library {
+        fun SetWindowSubclass(
+            hWnd: WinDef.HWND,
+            pfnSubclass: SubclassProcCallback,
+            uIdSubclass: BaseTSD.ULONG_PTR,
+            dwRefData: BaseTSD.DWORD_PTR,
+        ): Boolean
+
+        fun RemoveWindowSubclass(
+            hWnd: WinDef.HWND,
+            pfnSubclass: SubclassProcCallback,
+            uIdSubclass: BaseTSD.ULONG_PTR,
+        ): Boolean
+
+        fun DefSubclassProc(
+            hWnd: WinDef.HWND,
+            uMsg: Int,
+            wParam: WinDef.WPARAM,
+            lParam: WinDef.LPARAM,
+        ): WinDef.LRESULT
+
+        companion object {
+            val INSTANCE: CustomComctl32 by lazy {
+                Native.load("comctl32", CustomComctl32::class.java, W32APIOptions.UNICODE_OPTIONS)
+            }
+        }
+    }
+
     private interface CustomGdi32 : Library {
         fun CreateBitmap(nWidth: Int, nHeight: Int, nPlanes: Int, nBitCount: Int, lpBits: IntArray): WinDef.HBITMAP?
         fun CreateBitmap(nWidth: Int, nHeight: Int, nPlanes: Int, nBitCount: Int, lpBits: ByteArray): WinDef.HBITMAP?
@@ -108,6 +147,17 @@ object WindowsTaskbarThumbnailController {
                 Native.load("gdi32", CustomGdi32::class.java, W32APIOptions.DEFAULT_OPTIONS)
             }
         }
+    }
+
+    private interface SubclassProcCallback : Callback {
+        fun callback(
+            hWnd: WinDef.HWND,
+            uMsg: Int,
+            wParam: WinDef.WPARAM,
+            lParam: WinDef.LPARAM,
+            uIdSubclass: BaseTSD.ULONG_PTR,
+            dwRefData: BaseTSD.DWORD_PTR,
+        ): WinDef.LRESULT
     }
 
     private interface WindowProcCallback : Callback {
@@ -212,15 +262,24 @@ object WindowsTaskbarThumbnailController {
             buttons[2].setTooltip("Next")
             buttons[2].dwFlags = THBF_ENABLED
 
-            fun addButtons() {
+            var buttonsAdded = false
+
+            fun addButtonsSafe() {
+                if (buttonsAdded) return
                 buttons[0].write()
                 buttons[1].write()
                 buttons[2].write()
                 val res = taskbar.thumbBarAddButtons(hwnd, 3, buttons[0].pointer)
                 Logger.d(TAG, "thumbBarAddButtons result: $res")
+                if (res == 0) {
+                    buttonsAdded = true
+                }
             }
 
-            fun updateButtons(isPlaying: Boolean, hasPrev: Boolean, hasNext: Boolean) {
+            fun updateButtonsSafe(isPlaying: Boolean, hasPrev: Boolean, hasNext: Boolean) {
+                if (!buttonsAdded) {
+                    addButtonsSafe()
+                }
                 buttons[0].dwFlags = if (hasPrev) THBF_ENABLED else THBF_DISABLED
                 buttons[1].hIcon = if (isPlaying) pauseIcon else playIcon
                 buttons[1].setTooltip(if (isPlaying) "Pause" else "Play")
@@ -233,58 +292,114 @@ object WindowsTaskbarThumbnailController {
                 taskbar.thumbBarUpdateButtons(hwnd, 3, buttons[0].pointer)
             }
 
-            addButtons()
-
             val taskbarCreatedMsg = CustomUser32.INSTANCE.RegisterWindowMessageW(WString("TaskbarButtonCreated"))
 
-            var oldWndProc: Pointer? = null
-            val wndProc = object : WindowProcCallback {
+            fun handleCommandMessage(wParam: WinDef.WPARAM): Boolean {
+                val hiWord = (wParam.toLong() shr 16) and 0xFFFF
+                if (hiWord == THBN_CLICKED.toLong()) {
+                    val id = (wParam.toLong() and 0xFFFF).toInt()
+                    when (id) {
+                        ID_PREV -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous) }
+                        ID_PLAY_PAUSE -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause) }
+                        ID_NEXT -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next) }
+                    }
+                    return true
+                }
+                return false
+            }
+
+            // Attempt safe window subclassing via comctl32 first
+            val subclassProc = object : SubclassProcCallback {
                 override fun callback(
-                    hwnd: WinDef.HWND,
+                    hWnd: WinDef.HWND,
                     uMsg: Int,
                     wParam: WinDef.WPARAM,
                     lParam: WinDef.LPARAM,
+                    uIdSubclass: BaseTSD.ULONG_PTR,
+                    dwRefData: BaseTSD.DWORD_PTR,
                 ): WinDef.LRESULT {
                     if (uMsg == taskbarCreatedMsg) {
-                        addButtons()
-                    } else if (uMsg == WM_COMMAND) {
-                        val hiWord = (wParam.toLong() shr 16) and 0xFFFF
-                        if (hiWord == THBN_CLICKED.toLong()) {
-                            val id = (wParam.toLong() and 0xFFFF).toInt()
-                            when (id) {
-                                ID_PREV -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous) }
-                                ID_PLAY_PAUSE -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.PlayPause) }
-                                ID_NEXT -> coroutineScope.launch { mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next) }
-                            }
-                            return WinDef.LRESULT(0)
-                        }
+                        SwingUtilities.invokeLater { addButtonsSafe() }
+                        return CustomComctl32.INSTANCE.DefSubclassProc(hWnd, uMsg, wParam, lParam)
                     }
-                    val prev = oldWndProc
-                    return if (prev != null) {
-                        CustomUser32.INSTANCE.CallWindowProc(prev, hwnd, uMsg, wParam, lParam)
-                    } else {
-                        User32.INSTANCE.DefWindowProc(hwnd, uMsg, wParam, lParam)
+                    if (uMsg == WM_COMMAND && handleCommandMessage(wParam)) {
+                        return WinDef.LRESULT(0)
                     }
+                    return CustomComctl32.INSTANCE.DefSubclassProc(hWnd, uMsg, wParam, lParam)
                 }
             }
 
-            oldWndProc = CustomUser32.INSTANCE.SetWindowLongPtr(hwnd, GWLP_WNDPROC, wndProc)
+            // Keep strong reference to prevent GC
+            activeSubclassProc = subclassProc
+            val usedSubclass = runCatching {
+                CustomComctl32.INSTANCE.SetWindowSubclass(hwnd, subclassProc, SUBCLASS_ID, BaseTSD.DWORD_PTR(0L))
+            }.getOrDefault(false)
+
+            var oldWndProc: Pointer? = null
+            var fallbackWndProc: WindowProcCallback? = null
+
+            if (!usedSubclass) {
+                Logger.w(TAG, "comctl32 SetWindowSubclass failed, falling back to SetWindowLongPtr")
+                fallbackWndProc = object : WindowProcCallback {
+                    override fun callback(
+                        hwnd: WinDef.HWND,
+                        uMsg: Int,
+                        wParam: WinDef.WPARAM,
+                        lParam: WinDef.LPARAM,
+                    ): WinDef.LRESULT {
+                        if (uMsg == taskbarCreatedMsg) {
+                            SwingUtilities.invokeLater { addButtonsSafe() }
+                        } else if (uMsg == WM_COMMAND && handleCommandMessage(wParam)) {
+                            return WinDef.LRESULT(0)
+                        }
+                        val prev = oldWndProc
+                        return if (prev != null) {
+                            CustomUser32.INSTANCE.CallWindowProc(prev, hwnd, uMsg, wParam, lParam)
+                        } else {
+                            User32.INSTANCE.DefWindowProc(hwnd, uMsg, wParam, lParam)
+                        }
+                    }
+                }
+                activeWndProc = fallbackWndProc
+                oldWndProc = CustomUser32.INSTANCE.SetWindowLongPtr(hwnd, GWLP_WNDPROC, fallbackWndProc)
+            }
+
+            // If the window is already showing when attach() is invoked, initialize buttons on EDT
+            SwingUtilities.invokeLater {
+                if (window.isShowing) {
+                    addButtonsSafe()
+                }
+            }
 
             val stateJob = coroutineScope.launch {
                 mediaPlayerHandler.controlState.collectLatest { state ->
-                    updateButtons(
-                        isPlaying = state.isPlaying,
-                        hasPrev = state.isPreviousAvailable,
-                        hasNext = state.isNextAvailable,
-                    )
+                    SwingUtilities.invokeLater {
+                        updateButtonsSafe(
+                            isPlaying = state.isPlaying,
+                            hasPrev = state.isPreviousAvailable,
+                            hasNext = state.isNextAvailable,
+                        )
+                    }
                 }
             }
 
             val cleanup: () -> Unit = {
                 stateJob.cancel()
-                val prev = oldWndProc
-                if (prev != null) {
-                    CustomUser32.INSTANCE.SetWindowLongPtr(hwnd, GWLP_WNDPROC, prev)
+                if (usedSubclass) {
+                    runCatching {
+                        CustomComctl32.INSTANCE.RemoveWindowSubclass(hwnd, subclassProc, SUBCLASS_ID)
+                    }
+                    if (activeSubclassProc === subclassProc) {
+                        activeSubclassProc = null
+                    }
+                } else {
+                    val prev = oldWndProc
+                    if (prev != null) {
+                        CustomUser32.INSTANCE.SetWindowLongPtr(hwnd, GWLP_WNDPROC, prev)
+                    }
+                    if (activeWndProc === fallbackWndProc) {
+                        activeWndProc = null
+                    }
                 }
                 prevIcon?.let { CustomUser32.INSTANCE.DestroyIcon(it) }
                 playIcon?.let { CustomUser32.INSTANCE.DestroyIcon(it) }
